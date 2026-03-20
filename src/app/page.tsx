@@ -1,64 +1,340 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StatusBar } from "@/components/StatusBar";
+import { StatsCards } from "@/components/StatsCards";
+import { PipelineFunnel } from "@/components/PipelineFunnel";
+import { ChangelogFeed } from "@/components/ChangelogFeed";
+import { RecentDeals } from "@/components/RecentDeals";
+
+interface ChangelogEntry {
+  dealId: string;
+  dealName: string;
+  pipeline: string;
+  pipelineName: string;
+  property: string;
+  propertyLabel: string;
+  oldValue: string;
+  newValue: string;
+  oldLabel: string;
+  newLabel: string;
+  timestamp: string;
+  sourceType: string;
+}
+
+interface DealEntry {
+  id: string;
+  dealName: string;
+  pipelineName: string;
+  currentStageName: string;
+  stageNumber: number;
+  amount: number;
+  lastModified: string;
+  ownerName: string;
+  changeType?: string;
+}
+
+interface StageData {
+  stageId: string;
+  label: string;
+  count: number;
+}
+
+interface PipelineInfo {
+  pipeline: string;
+  pipeline_name: string;
+  deal_count: number;
+}
+
+function getCurrentQuarter(): string {
+  const now = new Date();
+  const q = Math.floor(now.getMonth() / 3) + 1;
+  return `${now.getFullYear()}-Q${q}`;
+}
+
+function getQuarterOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // Current year quarters + last year
+  for (let year = currentYear; year >= currentYear - 1; year--) {
+    for (let q = 4; q >= 1; q--) {
+      options.push({
+        value: `${year}-Q${q}`,
+        label: `Q${q} ${year}`,
+      });
+    }
+  }
+
+  return options;
+}
+
+export default function Dashboard() {
+  const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
+  const [recentDeals, setRecentDeals] = useState<DealEntry[]>([]);
+  const [growthStages, setGrowthStages] = useState<StageData[]>([]);
+  const [renewalStages, setRenewalStages] = useState<StageData[]>([]);
+  const [pipelineValue, setPipelineValue] = useState({
+    totalValue: 0,
+    count: 0,
+  });
+  const [closedWon, setClosedWon] = useState({ totalValue: 0, count: 0 });
+  const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [quarter, setQuarter] = useState(getCurrentQuarter());
+  const [error, setError] = useState<string | null>(null);
+
+  const activeRequest = useRef(0);
+
+  const fetchData = useCallback(async () => {
+    const requestId = ++activeRequest.current;
+    setIsLoading(true);
+    setError(null);
+
+    const isStale = () => requestId !== activeRequest.current;
+    const qParam = quarter ? `&quarter=${quarter}` : "";
+
+    try {
+      const [recentRes, growthRes, renewalRes, valueRes, closedWonRes, pipelinesRes] =
+        await Promise.all([
+          fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}`),
+          fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
+          fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
+          fetch("/api/hubspot?type=pipeline-value"),
+          fetch(`/api/hubspot?type=closed-won${qParam}`),
+          fetch("/api/hubspot?type=pipeline-list"),
+        ]);
+
+      if (isStale()) return;
+
+      let anySuccess = false;
+
+      if (recentRes.ok) {
+        const d = await recentRes.json();
+        if (!isStale()) { setRecentDeals(d.deals || []); anySuccess = true; }
+      }
+      if (growthRes.ok) {
+        const d = await growthRes.json();
+        if (!isStale()) { setGrowthStages(d.stats || []); anySuccess = true; }
+      }
+      if (renewalRes.ok) {
+        const d = await renewalRes.json();
+        if (!isStale()) { setRenewalStages(d.stats || []); anySuccess = true; }
+      }
+      if (valueRes.ok) {
+        const d = await valueRes.json();
+        if (!isStale()) { setPipelineValue(d); anySuccess = true; }
+      }
+      if (closedWonRes.ok) {
+        const d = await closedWonRes.json();
+        if (!isStale()) { setClosedWon(d); anySuccess = true; }
+      }
+      if (pipelinesRes.ok) {
+        const d = await pipelinesRes.json();
+        if (!isStale()) { setPipelines(d.pipelines || []); }
+      }
+
+      if (!anySuccess && !isStale()) {
+        setError("Failed to load data. Has the sync been run?");
+        setIsLoading(false);
+        return;
+      }
+
+      if (!isStale()) {
+        setLastUpdated(
+          new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+        );
+        setIsLoading(false);
+      }
+
+      // Fetch changelog separately (can be larger)
+      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}`);
+      if (changelogRes.ok && !isStale()) {
+        const d = await changelogRes.json();
+        if (!isStale()) setChangelog(d.changelogs || []);
+      }
+    } catch {
+      if (!isStale()) {
+        setError("Failed to load data. Check database connection.");
+        setIsLoading(false);
+      }
+    }
+  }, [quarter]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 120000);
+    return () => {
+      activeRequest.current++;
+      clearInterval(interval);
+    };
+  }, [fetchData]);
+
+  // Compute stats from changelog
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
+
+  const todayChanges = changelog.filter(
+    (c) => new Date(c.timestamp) >= todayStart
+  ).length;
+  const weekChanges = changelog.filter(
+    (c) => new Date(c.timestamp) >= weekStart
+  ).length;
+
+  const stats = {
+    totalOpenDeals: pipelineValue.count,
+    totalOpenValue: pipelineValue.totalValue,
+    todayChanges,
+    weekChanges,
+    closedWonThisMonth: closedWon.count,
+    closedWonValue: closedWon.totalValue,
+    quarterLabel: quarter,
+  };
+
+  // Total deals across all pipelines
+  const totalDeals = pipelines.reduce((s, p) => s + p.deal_count, 0);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="flex flex-col min-h-screen">
+      <StatusBar
+        lastUpdated={lastUpdated}
+        isLoading={isLoading}
+        onRefresh={() => fetchData()}
+      />
+
+      <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 py-6 space-y-6">
+        {/* Quarter filter + pipeline summary */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-xs text-[var(--text-muted)]">QUARTER:</span>
+            <select
+              value={quarter}
+              onChange={(e) => setQuarter(e.target.value)}
+              className="font-mono text-xs bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-primary)] rounded px-2 py-1.5 cursor-pointer hover:border-[var(--accent-blue)] transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {getQuarterOptions().map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-4">
+            {pipelines.slice(0, 5).map((p) => (
+              <span
+                key={p.pipeline}
+                className="font-mono text-[10px] text-[var(--text-muted)]"
+              >
+                {p.pipeline_name}:{" "}
+                <span className="text-[var(--text-secondary)]">{p.deal_count}</span>
+              </span>
+            ))}
+            {totalDeals > 0 && (
+              <span className="font-mono text-[10px] text-[var(--accent-blue)]">
+                total: {totalDeals}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Error state */}
+        {error && (
+          <div className="rounded-lg border border-[var(--accent-red)] bg-[var(--accent-red-dim)] p-4">
+            <p className="font-mono text-sm text-[var(--accent-red)]">
+              {error}
+            </p>
+          </div>
+        )}
+
+        {/* Stats row */}
+        <StatsCards stats={stats} />
+
+        {/* Main content grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Changelog - main column */}
+          <div className="lg:col-span-7 xl:col-span-8">
+            <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-[var(--accent-orange)]">
+                    &gt;
+                  </span>
+                  <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+                    Changelog
+                  </h2>
+                  {changelog.length > 0 && (
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)] border border-[var(--border-color)]">
+                      {changelog.length}
+                    </span>
+                  )}
+                </div>
+
+                {/* Filter tabs */}
+                <div className="flex items-center gap-1">
+                  {[
+                    { key: "all", label: "all" },
+                    { key: "stage", label: "stages" },
+                    { key: "amount", label: "amounts" },
+                  ].map((f) => (
+                    <button
+                      key={f.key}
+                      onClick={() => setFilter(f.key)}
+                      className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                        filter === f.key
+                          ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                          : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isLoading && changelog.length === 0 ? (
+                <div className="space-y-3 py-4">
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[var(--bg-secondary)] animate-pulse" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 bg-[var(--bg-secondary)] rounded animate-pulse w-3/4" />
+                        <div className="h-2 bg-[var(--bg-secondary)] rounded animate-pulse w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ChangelogFeed entries={changelog} filter={filter} />
+              )}
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+            <PipelineFunnel stages={growthStages} title="Growth Pipeline" />
+            {renewalStages.length > 0 && (
+              <PipelineFunnel stages={renewalStages} title="Renewal Pipeline" />
+            )}
+            <RecentDeals deals={recentDeals} />
+          </div>
         </div>
+
+        {/* Footer */}
+        <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+              CEO Dashboard v1.1 &middot; HubSpot Pipeline Changelog
+            </span>
+            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+              auto-refresh: 2min &middot; hub:{" "}
+              <span className="text-[var(--accent-blue)]">3282655</span>
+            </span>
+          </div>
+        </footer>
       </main>
     </div>
   );
