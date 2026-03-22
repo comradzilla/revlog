@@ -43,34 +43,35 @@
     --font-sans: "Geist", "Inter", system-ui, sans-serif;
   }
 
-  /* Chromatic — rich saturated dark */
+  /* Terminal — pure console/CRT monochrome */
   [data-theme="chromatic"] {
-    --bg-primary: #0f0a1a;
-    --bg-secondary: #1a1029;
-    --bg-card: #221538;
-    --bg-card-hover: #2d1d4a;
-    --border-color: #3b2560;
-    --border-active: #5b3d8f;
-    --text-primary: #f0e6ff;
-    --text-secondary: #c4a8e8;
-    --text-muted: #8b6baf;
-    --accent-green: #00e68a;
-    --accent-green-dim: #003d24;
-    --accent-blue: #6366f1;
-    --accent-blue-dim: #2a1f6e;
-    --accent-orange: #ff9f43;
-    --accent-orange-dim: #5c3200;
-    --accent-red: #ff6b6b;
-    --accent-red-dim: #5c1a1a;
-    --accent-purple: #a78bfa;
-    --accent-purple-dim: #3b1f7a;
-    --accent-cyan: #22d3ee;
-    --glow-green: 0 0 24px rgba(0, 230, 138, 0.2);
-    --glow-blue: 0 0 24px rgba(99, 102, 241, 0.2);
-    --scrollbar-thumb: #5b3d8f;
+    --bg-primary: #000000;
+    --bg-secondary: #0a0a0a;
+    --bg-card: #050505;
+    --bg-card-hover: #111111;
+    --border-color: #222222;
+    --border-active: #333333;
+    --text-primary: #b0b0b0;
+    --text-secondary: #707070;
+    --text-muted: #444444;
+    --accent-green: #33ff33;
+    --accent-green-dim: #0a1a0a;
+    --accent-blue: #33ff33;
+    --accent-blue-dim: #0a1a0a;
+    --accent-orange: #cccc00;
+    --accent-orange-dim: #1a1a00;
+    --accent-red: #ff3333;
+    --accent-red-dim: #1a0a0a;
+    --accent-purple: #33ff33;
+    --accent-purple-dim: #0a1a0a;
+    --accent-cyan: #33ff33;
+    --glow-green: 0 0 0 transparent;
+    --glow-blue: 0 0 0 transparent;
+    --scrollbar-thumb: #333333;
     --scrollbar-track: transparent;
-    --card-glow-a: rgba(99, 102, 241, 0.15);
-    --card-glow-b: rgba(0, 230, 138, 0.15);
+    --card-glow-a: transparent;
+    --card-glow-b: transparent;
+    --font-override: "Geist Mono", "Courier New", "Lucida Console", monospace;
   }
 
   /* Light — clean professional */
@@ -152,6 +153,31 @@ body {
 /* Light mode card shadow */
 [data-theme="light"] .card-glow {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Terminal mode — force monospace everything, strip decorations */
+[data-theme="chromatic"] {
+  font-family: "Geist Mono", "Courier New", "Lucida Console", monospace !important;
+}
+[data-theme="chromatic"] * {
+  font-family: inherit !important;
+  border-radius: 0 !important;
+}
+[data-theme="chromatic"] .card-glow::before {
+  display: none;
+}
+[data-theme="chromatic"] .card-glow {
+  border-style: dashed;
+}
+[data-theme="chromatic"] .stage-prospecting,
+[data-theme="chromatic"] .stage-qualification,
+[data-theme="chromatic"] .stage-solutioning,
+[data-theme="chromatic"] .stage-proposal,
+[data-theme="chromatic"] .stage-negotiation,
+[data-theme="chromatic"] .stage-closed-won,
+[data-theme="chromatic"] .stage-closed-lost {
+  background: transparent;
+  border: 1px dashed currentColor;
 }
 
 /* Timeline line */
