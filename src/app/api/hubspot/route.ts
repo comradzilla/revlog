@@ -197,22 +197,41 @@ export async function GET(request: Request) {
       }
 
       case "dealtype-stats": {
-        // Upsell/expansion breakdown by stage (across all pipelines)
+        // Upsell breakdown by stage, optionally filtered by pipeline
         const dtParam = searchParams.get("dealType") || "upsell";
         const types = dtParam === "upsell" ? UPSELL_TYPES : NEW_BIZ_TYPES;
+        const dtPipeline = searchParams.get("dtPipeline");
+
+        const dtParams: (string | string[])[] = [types];
+        let dtWhere = `deal_type = ANY($1)
+             AND stage_name NOT ILIKE '%closed lost%'
+             AND stage_name NOT ILIKE '%churn%'`;
+
+        if (dtPipeline && dtPipeline !== "all") {
+          dtParams.push(dtPipeline);
+          dtWhere += ` AND pipeline = $${dtParams.length}`;
+        }
 
         const result = await query(
           `SELECT stage_name as label, deal_stage as "stageId",
                   COUNT(*)::integer as count,
                   COALESCE(SUM(amount), 0)::numeric as total_value
            FROM deals
-           WHERE deal_type = ANY($1)
-             AND stage_name NOT ILIKE '%closed lost%'
-             AND stage_name NOT ILIKE '%churn%'
+           WHERE ${dtWhere}
            GROUP BY deal_stage, stage_name
            ORDER BY stage_name`,
+          dtParams
+        );
+
+        // Also get the pipelines that have upsell deals for the toggle
+        const pipelinesResult = await query(
+          `SELECT DISTINCT pipeline, pipeline_name, COUNT(*)::integer as count
+           FROM deals WHERE deal_type = ANY($1)
+             AND stage_name NOT ILIKE '%closed lost%' AND stage_name NOT ILIKE '%churn%'
+           GROUP BY pipeline, pipeline_name ORDER BY count DESC`,
           [types]
         );
+
         const stats = result.rows.map((r: Record<string, string>) => ({
           stageId: r.stageId,
           label: r.label,
@@ -221,7 +240,10 @@ export async function GET(request: Request) {
         }));
         const totalCount = stats.reduce((s, r) => s + r.count, 0);
         const totalValue = stats.reduce((s, r) => s + r.total_value, 0);
-        return Response.json({ stats, totalCount, totalValue });
+        return Response.json({
+          stats, totalCount, totalValue,
+          pipelines: pipelinesResult.rows,
+        });
       }
 
       case "pipeline-value": {

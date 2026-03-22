@@ -7,6 +7,11 @@ interface StageData {
   total_value: number;
 }
 
+interface FilterOption {
+  key: string;
+  label: string;
+}
+
 const STAGE_COLORS: Record<string, string> = {
   // Growth
   "01 - Prospecting": "var(--accent-blue)",
@@ -32,6 +37,8 @@ const STAGE_COLORS: Record<string, string> = {
   "Renewed": "var(--accent-green)",
   "Closed Lost": "var(--accent-red)",
   "Closed Won / Renewed": "var(--accent-green)",
+  // VS-Sales
+  "Closed Won": "var(--accent-green)",
 };
 
 function getStageColor(label: string): string {
@@ -57,27 +64,33 @@ export function PipelineFunnel({
   totalCount = 0,
   totalValue = 0,
   accentColor,
+  filterOptions,
+  activeFilter,
+  onFilterChange,
 }: {
   stages: StageData[];
   title?: string;
   totalCount?: number;
   totalValue?: number;
   accentColor?: string;
+  filterOptions?: FilterOption[];
+  activeFilter?: string;
+  onFilterChange?: (key: string) => void;
 }) {
+  const accent = accentColor || "var(--accent-blue)";
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 
   return (
     <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs" style={{ color: accentColor || "var(--accent-blue)" }}>
+          <span className="font-mono text-xs" style={{ color: accent }}>
             &gt;
           </span>
           <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
             {title}
           </h2>
         </div>
-        {/* Rollup totals */}
         {totalCount > 0 && (
           <div className="flex items-center gap-3">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
@@ -89,6 +102,26 @@ export function PipelineFunnel({
           </div>
         )}
       </div>
+
+      {/* Optional inline pipeline toggle */}
+      {filterOptions && filterOptions.length > 1 && onFilterChange && (
+        <div className="flex items-center gap-1 mb-3">
+          {filterOptions.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => onFilterChange(opt.key)}
+              className={`font-mono text-[9px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                activeFilter === opt.key
+                  ? "border-[var(--accent-orange)] bg-[var(--accent-orange-dim)] text-[var(--accent-orange)]"
+                  : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="space-y-2.5">
         {stages.map((stage) => {
           const color = getStageColor(stage.label);

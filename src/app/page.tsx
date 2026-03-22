@@ -86,6 +86,8 @@ export default function Dashboard() {
   const [renewalTotals, setRenewalTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [upsellStages, setUpsellStages] = useState<StageData[]>([]);
   const [upsellTotals, setUpsellTotals] = useState({ totalCount: 0, totalValue: 0 });
+  const [upsellPipelines, setUpsellPipelines] = useState<{ pipeline: string; pipeline_name: string; count: number }[]>([]);
+  const [upsellPipelineFilter, setUpsellPipelineFilter] = useState("4207989"); // default: Growth
   const [pipelineValue, setPipelineValue] = useState({
     totalValue: 0,
     count: 0,
@@ -128,7 +130,7 @@ export default function Dashboard() {
           fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}${dtParam}`),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
-          fetch("/api/hubspot?type=dealtype-stats&dealType=upsell"),
+          fetch(`/api/hubspot?type=dealtype-stats&dealType=upsell&dtPipeline=${upsellPipelineFilter}`),
           fetch("/api/hubspot?type=pipeline-value"),
           fetch(`/api/hubspot?type=closed-won${qParam}`),
           fetch("/api/hubspot?type=pipeline-list"),
@@ -163,6 +165,7 @@ export default function Dashboard() {
         if (!isStale()) {
           setUpsellStages(d.stats || []);
           setUpsellTotals({ totalCount: d.totalCount || 0, totalValue: d.totalValue || 0 });
+          if (d.pipelines) setUpsellPipelines(d.pipelines);
         }
       }
       if (valueRes.ok) {
@@ -203,7 +206,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     }
-  }, [selectedQuarters, pipelineFilter, dealTypeFilter]);
+  }, [selectedQuarters, pipelineFilter, dealTypeFilter, upsellPipelineFilter]);
 
   useEffect(() => {
     fetchData();
@@ -427,10 +430,16 @@ export default function Dashboard() {
             {upsellStages.length > 0 && (
               <PipelineFunnel
                 stages={upsellStages}
-                title="Upsell / Expansion"
+                title="Upsell"
                 totalCount={upsellTotals.totalCount}
                 totalValue={upsellTotals.totalValue}
                 accentColor="var(--accent-orange)"
+                filterOptions={[
+                  { key: "all", label: "ALL" },
+                  ...upsellPipelines.map(p => ({ key: p.pipeline, label: p.pipeline_name })),
+                ]}
+                activeFilter={upsellPipelineFilter}
+                onFilterChange={setUpsellPipelineFilter}
               />
             )}
             <RecentDeals deals={recentDeals} />
