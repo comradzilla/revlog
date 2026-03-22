@@ -1,32 +1,5 @@
 @import "tailwindcss";
 
-:root {
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: #151d2e;
-  --bg-card-hover: #1a2540;
-  --border-color: #1e293b;
-  --border-active: #334155;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent-green: #10b981;
-  --accent-green-dim: #065f46;
-  --accent-blue: #3b82f6;
-  --accent-blue-dim: #1e3a5f;
-  --accent-orange: #f59e0b;
-  --accent-orange-dim: #78350f;
-  --accent-red: #ef4444;
-  --accent-red-dim: #7f1d1d;
-  --accent-purple: #8b5cf6;
-  --accent-purple-dim: #4c1d95;
-  --accent-cyan: #06b6d4;
-  --glow-green: 0 0 20px rgba(16, 185, 129, 0.15);
-  --glow-blue: 0 0 20px rgba(59, 130, 246, 0.15);
-  --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", monospace;
-  --font-sans: "Geist", "Inter", system-ui, sans-serif;
-}
-
 @theme inline {
   --color-background: var(--bg-primary);
   --color-foreground: var(--text-primary);
@@ -34,15 +7,113 @@
   --font-mono: var(--font-mono);
 }
 
+/* ============================================
+   Theme definitions in base layer
+   ============================================ */
+@layer base {
+  /* Terminal (default) — deep navy dark */
+  :root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-card: #151d2e;
+    --bg-card-hover: #1a2540;
+    --border-color: #1e293b;
+    --border-active: #334155;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-green: #10b981;
+    --accent-green-dim: #065f46;
+    --accent-blue: #3b82f6;
+    --accent-blue-dim: #1e3a5f;
+    --accent-orange: #f59e0b;
+    --accent-orange-dim: #78350f;
+    --accent-red: #ef4444;
+    --accent-red-dim: #7f1d1d;
+    --accent-purple: #8b5cf6;
+    --accent-purple-dim: #4c1d95;
+    --accent-cyan: #06b6d4;
+    --glow-green: 0 0 20px rgba(16, 185, 129, 0.15);
+    --glow-blue: 0 0 20px rgba(59, 130, 246, 0.15);
+    --scrollbar-thumb: #334155;
+    --scrollbar-track: transparent;
+    --card-glow-a: rgba(59, 130, 246, 0.1);
+    --card-glow-b: rgba(16, 185, 129, 0.1);
+    --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", monospace;
+    --font-sans: "Geist", "Inter", system-ui, sans-serif;
+  }
+
+  /* Chromatic — rich saturated dark */
+  [data-theme="chromatic"] {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1029;
+    --bg-card: #221538;
+    --bg-card-hover: #2d1d4a;
+    --border-color: #3b2560;
+    --border-active: #5b3d8f;
+    --text-primary: #f0e6ff;
+    --text-secondary: #c4a8e8;
+    --text-muted: #8b6baf;
+    --accent-green: #00e68a;
+    --accent-green-dim: #003d24;
+    --accent-blue: #6366f1;
+    --accent-blue-dim: #2a1f6e;
+    --accent-orange: #ff9f43;
+    --accent-orange-dim: #5c3200;
+    --accent-red: #ff6b6b;
+    --accent-red-dim: #5c1a1a;
+    --accent-purple: #a78bfa;
+    --accent-purple-dim: #3b1f7a;
+    --accent-cyan: #22d3ee;
+    --glow-green: 0 0 24px rgba(0, 230, 138, 0.2);
+    --glow-blue: 0 0 24px rgba(99, 102, 241, 0.2);
+    --scrollbar-thumb: #5b3d8f;
+    --scrollbar-track: transparent;
+    --card-glow-a: rgba(99, 102, 241, 0.15);
+    --card-glow-b: rgba(0, 230, 138, 0.15);
+  }
+
+  /* Light — clean professional */
+  [data-theme="light"] {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f8fafc;
+    --border-color: #e2e8f0;
+    --border-active: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --accent-green: #059669;
+    --accent-green-dim: #d1fae5;
+    --accent-blue: #2563eb;
+    --accent-blue-dim: #dbeafe;
+    --accent-orange: #d97706;
+    --accent-orange-dim: #fef3c7;
+    --accent-red: #dc2626;
+    --accent-red-dim: #fee2e2;
+    --accent-purple: #7c3aed;
+    --accent-purple-dim: #ede9fe;
+    --accent-cyan: #0891b2;
+    --glow-green: 0 0 0 transparent;
+    --glow-blue: 0 0 0 transparent;
+    --scrollbar-thumb: #cbd5e1;
+    --scrollbar-track: transparent;
+    --card-glow-a: rgba(37, 99, 235, 0.06);
+    --card-glow-b: rgba(5, 150, 105, 0.06);
+  }
+}
+
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Pulsing dot animation */
@@ -55,15 +126,10 @@ body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
-/* Scan line effect */
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-
 /* Glow effect on cards */
 .card-glow {
   position: relative;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .card-glow::before {
@@ -74,13 +140,18 @@ body {
   padding: 1px;
   background: linear-gradient(
     135deg,
-    rgba(59, 130, 246, 0.1),
+    var(--card-glow-a),
     transparent 50%,
-    rgba(16, 185, 129, 0.1)
+    var(--card-glow-b)
   );
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
+}
+
+/* Light mode card shadow */
+[data-theme="light"] .card-glow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 /* Timeline line */
@@ -97,21 +168,15 @@ body {
 .stage-prospecting { background: var(--accent-blue-dim); color: var(--accent-blue); border-color: var(--accent-blue); }
 .stage-qualification { background: var(--accent-purple-dim); color: var(--accent-purple); border-color: var(--accent-purple); }
 .stage-solutioning { background: var(--accent-orange-dim); color: var(--accent-orange); border-color: var(--accent-orange); }
-.stage-proposal { background: var(--accent-cyan); color: #0a0e17; }
-.stage-negotiation { background: rgba(245, 158, 11, 0.15); color: var(--accent-orange); border-color: var(--accent-orange); }
+.stage-proposal { background: var(--accent-cyan); color: var(--bg-primary); }
+.stage-negotiation { background: var(--accent-orange-dim); color: var(--accent-orange); border-color: var(--accent-orange); }
 .stage-closed-won { background: var(--accent-green-dim); color: var(--accent-green); border-color: var(--accent-green); }
 .stage-closed-lost { background: var(--accent-red-dim); color: var(--accent-red); border-color: var(--accent-red); }
 
 /* Fade-in animation for changelog entries */
 @keyframes fade-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .changelog-entry {
@@ -119,10 +184,45 @@ body {
 }
 
 /* Amount change indicators */
-.amount-up {
-  color: var(--accent-green);
+.amount-up { color: var(--accent-green); }
+.amount-down { color: var(--accent-red); }
+
+/* Theme toggle group */
+.theme-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
-.amount-down {
-  color: var(--accent-red);
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-muted);
+}
+
+.theme-toggle-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+}
+
+.theme-toggle-btn.active {
+  background: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+
+/* Light mode select styling */
+[data-theme="light"] select {
+  color-scheme: light;
 }

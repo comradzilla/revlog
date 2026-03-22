@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeToggle } from "./ThemeToggle";
+
 export function StatusBar({
   lastUpdated,
   isLoading,
@@ -10,7 +12,7 @@ export function StatusBar({
   onRefresh: () => void;
 }) {
   return (
-    <header className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-sm sticky top-0 z-50">
+    <header className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-sm sticky top-0 z-50 transition-colors duration-300">
       <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -26,7 +28,7 @@ export function StatusBar({
           </h1>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="font-mono text-xs text-[var(--text-muted)]">
               synced {lastUpdated}
@@ -64,6 +66,8 @@ export function StatusBar({
               "refresh"
             )}
           </button>
+          <div className="h-4 w-px bg-[var(--border-color)]" />
+          <ThemeToggle />
         </div>
       </div>
     </header>
