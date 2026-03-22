@@ -71,6 +71,12 @@ function getQuarterOptions(): { value: string; label: string }[] {
   return options;
 }
 
+const DEAL_TYPE_OPTIONS = [
+  { key: "all", label: "ALL" },
+  { key: "upsell", label: "UPSELL" },
+  { key: "newbusiness", label: "NEW BIZ" },
+];
+
 export default function Dashboard() {
   const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
   const [recentDeals, setRecentDeals] = useState<DealEntry[]>([]);
@@ -78,6 +84,8 @@ export default function Dashboard() {
   const [growthTotals, setGrowthTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [renewalStages, setRenewalStages] = useState<StageData[]>([]);
   const [renewalTotals, setRenewalTotals] = useState({ totalCount: 0, totalValue: 0 });
+  const [upsellStages, setUpsellStages] = useState<StageData[]>([]);
+  const [upsellTotals, setUpsellTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [pipelineValue, setPipelineValue] = useState({
     totalValue: 0,
     count: 0,
@@ -89,6 +97,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState("all");
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [dealTypeFilter, setDealTypeFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
   const activeRequest = useRef(0);
@@ -96,7 +105,6 @@ export default function Dashboard() {
   const toggleQuarter = (qtr: string) => {
     setSelectedQuarters(prev => {
       if (prev.includes(qtr)) {
-        // Don't allow deselecting all — keep at least one
         if (prev.length === 1) return prev;
         return prev.filter(q => q !== qtr);
       }
@@ -112,13 +120,15 @@ export default function Dashboard() {
     const isStale = () => requestId !== activeRequest.current;
     const qParam = selectedQuarters.length > 0 ? `&quarter=${selectedQuarters.join(",")}` : "";
     const pParam = pipelineFilter !== "all" ? `&pipeline=${pipelineFilter}` : "";
+    const dtParam = dealTypeFilter !== "all" ? `&dealType=${dealTypeFilter}` : "";
 
     try {
-      const [recentRes, growthRes, renewalRes, valueRes, closedWonRes, pipelinesRes] =
+      const [recentRes, growthRes, renewalRes, upsellRes, valueRes, closedWonRes, pipelinesRes] =
         await Promise.all([
-          fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}`),
+          fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}${dtParam}`),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
+          fetch("/api/hubspot?type=dealtype-stats&dealType=upsell"),
           fetch("/api/hubspot?type=pipeline-value"),
           fetch(`/api/hubspot?type=closed-won${qParam}`),
           fetch("/api/hubspot?type=pipeline-list"),
@@ -148,6 +158,13 @@ export default function Dashboard() {
           anySuccess = true;
         }
       }
+      if (upsellRes.ok) {
+        const d = await upsellRes.json();
+        if (!isStale()) {
+          setUpsellStages(d.stats || []);
+          setUpsellTotals({ totalCount: d.totalCount || 0, totalValue: d.totalValue || 0 });
+        }
+      }
       if (valueRes.ok) {
         const d = await valueRes.json();
         if (!isStale()) { setPipelineValue(d); anySuccess = true; }
@@ -174,8 +191,8 @@ export default function Dashboard() {
         setIsLoading(false);
       }
 
-      // Fetch changelog separately (can be larger)
-      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}`);
+      // Fetch changelog separately
+      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
         if (!isStale()) setChangelog(d.changelogs || []);
@@ -186,7 +203,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     }
-  }, [selectedQuarters, pipelineFilter]);
+  }, [selectedQuarters, pipelineFilter, dealTypeFilter]);
 
   useEffect(() => {
     fetchData();
@@ -223,7 +240,6 @@ export default function Dashboard() {
     quarterLabel,
   };
 
-  // Total deals across all pipelines
   const totalDeals = pipelines.reduce((s, p) => s + p.deal_count, 0);
 
   return (
@@ -237,7 +253,7 @@ export default function Dashboard() {
       <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 py-6 space-y-6">
         {/* Filters bar */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             {/* Quarter multi-select */}
             <div className="flex items-center gap-1">
               <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase mr-1">QTR</span>
@@ -255,10 +271,28 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
+
+            {/* Deal type filter */}
+            <div className="flex items-center gap-1">
+              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase mr-1">TYPE</span>
+              {DEAL_TYPE_OPTIONS.map((dt) => (
+                <button
+                  key={dt.key}
+                  onClick={() => setDealTypeFilter(dt.key)}
+                  className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                    dealTypeFilter === dt.key
+                      ? "border-[var(--accent-orange)] bg-[var(--accent-orange-dim)] text-[var(--accent-orange)]"
+                      : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  }`}
+                >
+                  {dt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Pipeline filter + counts */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPipelineFilter("all")}
@@ -390,6 +424,15 @@ export default function Dashboard() {
                 totalValue={renewalTotals.totalValue}
               />
             )}
+            {upsellStages.length > 0 && (
+              <PipelineFunnel
+                stages={upsellStages}
+                title="Upsell / Expansion"
+                totalCount={upsellTotals.totalCount}
+                totalValue={upsellTotals.totalValue}
+                accentColor="var(--accent-orange)"
+              />
+            )}
             <RecentDeals deals={recentDeals} />
           </div>
         </div>
@@ -398,7 +441,7 @@ export default function Dashboard() {
         <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
-              CEO Dashboard v1.3 &middot; HubSpot Pipeline Changelog
+              CEO Dashboard v1.4 &middot; HubSpot Pipeline Changelog
             </span>
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
               auto-refresh: 2min &middot; hub:{" "}

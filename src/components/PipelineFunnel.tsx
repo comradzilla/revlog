@@ -56,11 +56,13 @@ export function PipelineFunnel({
   title = "Pipeline",
   totalCount = 0,
   totalValue = 0,
+  accentColor,
 }: {
   stages: StageData[];
   title?: string;
   totalCount?: number;
   totalValue?: number;
+  accentColor?: string;
 }) {
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 
@@ -68,7 +70,7 @@ export function PipelineFunnel({
     <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-[var(--accent-blue)]">
+          <span className="font-mono text-xs" style={{ color: accentColor || "var(--accent-blue)" }}>
             &gt;
           </span>
           <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">

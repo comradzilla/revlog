@@ -2,7 +2,10 @@ import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Parse quarter param(s) like "2025-Q1" or "2025-Q1,2025-Q2" into date ranges
+// Normalize deal type values from HubSpot
+const UPSELL_TYPES = ["existingbusiness", "existing_business"];
+const NEW_BIZ_TYPES = ["newbusiness", "new_business"];
+
 function parseQuarters(q: string | null): { start: Date; end: Date }[] {
   if (!q) return [];
   return q.split(",").map(part => {
@@ -18,11 +21,10 @@ function parseQuarters(q: string | null): { start: Date; end: Date }[] {
   }).filter(Boolean) as { start: Date; end: Date }[];
 }
 
-// Build SQL condition for multiple quarter ranges
 function quarterCondition(
   quarters: { start: Date; end: Date }[],
   column: string,
-  params: (string | number | Date)[],
+  params: (string | number | Date | string[])[]
 ): string {
   if (quarters.length === 0) return "";
   if (quarters.length === 1) {
@@ -36,36 +38,70 @@ function quarterCondition(
   return `(${parts.join(" OR ")})`;
 }
 
+// Build deal type SQL condition
+function dealTypeCondition(
+  dtFilter: string | null,
+  column: string,
+  params: (string | number | Date | string[])[]
+): string {
+  if (!dtFilter || dtFilter === "all") return "";
+  if (dtFilter === "upsell") {
+    params.push(UPSELL_TYPES);
+    return `${column} = ANY($${params.length})`;
+  }
+  if (dtFilter === "newbusiness") {
+    params.push(NEW_BIZ_TYPES);
+    return `${column} = ANY($${params.length})`;
+  }
+  params.push(dtFilter);
+  return `${column} = $${params.length}`;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") || "changelog";
   const quarters = parseQuarters(searchParams.get("quarter"));
   const pipelineFilter = searchParams.get("pipeline");
+  const dealTypeFilter = searchParams.get("dealType");
 
   try {
     switch (type) {
       case "changelog": {
         const limit = parseInt(searchParams.get("limit") || "200");
-        let sql = `SELECT deal_id, deal_name, pipeline, pipeline_name, property,
-                  property_label, old_value, new_value, old_label, new_label,
-                  changed_at as timestamp, source_type
-           FROM deal_changelog`;
-        const params: (string | number | Date)[] = [];
+        const params: (string | number | Date | string[])[] = [];
         const conditions: string[] = [];
+        // If filtering by deal type, need to join deals table
+        const needsDealJoin = dealTypeFilter && dealTypeFilter !== "all";
 
-        const qc = quarterCondition(quarters, "changed_at", params);
+        let sql = needsDealJoin
+          ? `SELECT cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name, cl.property,
+                    cl.property_label, cl.old_value, cl.new_value, cl.old_label, cl.new_label,
+                    cl.changed_at as timestamp, cl.source_type
+             FROM deal_changelog cl
+             JOIN deals d ON d.id = cl.deal_id`
+          : `SELECT deal_id, deal_name, pipeline, pipeline_name, property,
+                    property_label, old_value, new_value, old_label, new_label,
+                    changed_at as timestamp, source_type
+             FROM deal_changelog`;
+
+        const colPrefix = needsDealJoin ? "cl." : "";
+
+        const qc = quarterCondition(quarters, `${colPrefix}changed_at`, params);
         if (qc) conditions.push(qc);
 
         if (pipelineFilter && pipelineFilter !== "all") {
           params.push(pipelineFilter);
-          conditions.push(`pipeline = $${params.length}`);
+          conditions.push(`${colPrefix}pipeline = $${params.length}`);
         }
+
+        const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", params);
+        if (dtc) conditions.push(dtc);
 
         if (conditions.length > 0) {
           sql += ` WHERE ${conditions.join(" AND ")}`;
         }
 
-        sql += ` ORDER BY changed_at DESC LIMIT $${params.length + 1}`;
+        sql += ` ORDER BY ${colPrefix}changed_at DESC LIMIT $${params.length + 1}`;
         params.push(limit);
 
         const result = await query(sql, params);
@@ -88,7 +124,7 @@ export async function GET(request: Request) {
 
       case "recently-changed": {
         const limit = parseInt(searchParams.get("limit") || "15");
-        const params: (string | number | Date)[] = [];
+        const params: (string | number | Date | string[])[] = [];
         const conditions: string[] = [];
 
         const qc = quarterCondition(quarters, "cl.changed_at", params);
@@ -98,6 +134,9 @@ export async function GET(request: Request) {
           params.push(pipelineFilter);
           conditions.push(`cl.pipeline = $${params.length}`);
         }
+
+        const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", params);
+        if (dtc) conditions.push(dtc);
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -146,7 +185,34 @@ export async function GET(request: Request) {
            ORDER BY stage_name`,
           [pipelineId]
         );
-        // Also compute rollup totals
+        const stats = result.rows.map((r: Record<string, string>) => ({
+          stageId: r.stageId,
+          label: r.label,
+          count: parseInt(String(r.count)),
+          total_value: parseFloat(String(r.total_value)),
+        }));
+        const totalCount = stats.reduce((s, r) => s + r.count, 0);
+        const totalValue = stats.reduce((s, r) => s + r.total_value, 0);
+        return Response.json({ stats, totalCount, totalValue });
+      }
+
+      case "dealtype-stats": {
+        // Upsell/expansion breakdown by stage (across all pipelines)
+        const dtParam = searchParams.get("dealType") || "upsell";
+        const types = dtParam === "upsell" ? UPSELL_TYPES : NEW_BIZ_TYPES;
+
+        const result = await query(
+          `SELECT stage_name as label, deal_stage as "stageId",
+                  COUNT(*)::integer as count,
+                  COALESCE(SUM(amount), 0)::numeric as total_value
+           FROM deals
+           WHERE deal_type = ANY($1)
+             AND stage_name NOT ILIKE '%closed lost%'
+             AND stage_name NOT ILIKE '%churn%'
+           GROUP BY deal_stage, stage_name
+           ORDER BY stage_name`,
+          [types]
+        );
         const stats = result.rows.map((r: Record<string, string>) => ({
           stageId: r.stageId,
           label: r.label,
@@ -186,7 +252,7 @@ export async function GET(request: Request) {
       }
 
       case "closed-won": {
-        const params: (string | number | Date)[] = [];
+        const params: (string | number | Date | string[])[] = [];
         let dateCondition: string;
 
         if (quarters.length > 0) {
