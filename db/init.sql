@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS deals (
     created_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ,
     stage_entered_at TIMESTAMPTZ,
+    deal_type TEXT,
     synced_at TIMESTAMPTZ DEFAULT NOW()
 );
 

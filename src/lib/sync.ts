@@ -76,6 +76,7 @@ async function fetchAllDeals(): Promise<DealChange[]> {
         "closedate",
         "hs_lastmodifieddate",
         "hs_v2_date_entered_current_stage",
+        "dealtype",
       ],
       limit,
       after: offset > 0 ? offset : undefined,
@@ -107,6 +108,7 @@ async function fetchAllDeals(): Promise<DealChange[]> {
         createdAt: deal.properties.createdate,
         ownerName: "",
         ownerId: deal.properties.hubspot_owner_id || null,
+        dealType: deal.properties.dealtype || null,
       });
     }
 
@@ -122,8 +124,8 @@ async function syncDeals() {
 
   for (const deal of deals) {
     await query(
-      `INSERT INTO deals (id, deal_name, pipeline, pipeline_name, deal_stage, stage_name, amount, close_date, owner_id, created_at, updated_at, stage_entered_at, synced_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+      `INSERT INTO deals (id, deal_name, pipeline, pipeline_name, deal_stage, stage_name, amount, close_date, owner_id, created_at, updated_at, stage_entered_at, deal_type, synced_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
        ON CONFLICT (id) DO UPDATE SET
          deal_name = EXCLUDED.deal_name,
          pipeline = EXCLUDED.pipeline,
@@ -135,6 +137,7 @@ async function syncDeals() {
          owner_id = EXCLUDED.owner_id,
          updated_at = EXCLUDED.updated_at,
          stage_entered_at = EXCLUDED.stage_entered_at,
+         deal_type = EXCLUDED.deal_type,
          synced_at = NOW()`,
       [
         deal.id,
@@ -149,6 +152,7 @@ async function syncDeals() {
         deal.createdAt,
         deal.lastModified,
         deal.stageEnteredDate,
+        (deal as DealChange & { dealType?: string }).dealType || null,
       ]
     );
   }

@@ -93,6 +93,7 @@ export interface DealChange {
   createdAt: string;
   ownerName: string;
   ownerId?: string;
+  dealType?: string;
 }
 
 export interface PropertyHistory {

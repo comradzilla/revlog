@@ -32,6 +32,7 @@ interface DealEntry {
   lastModified: string;
   ownerName: string;
   changeType?: string;
+  dealType?: string;
 }
 
 interface StageData {
@@ -57,7 +58,6 @@ function getQuarterOptions(): { value: string; label: string }[] {
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  // Current year quarters + last year
   for (let year = currentYear; year >= currentYear - 1; year--) {
     for (let q = 4; q >= 1; q--) {
       options.push({
@@ -85,6 +85,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
   const [quarter, setQuarter] = useState(getCurrentQuarter());
+  const [pipelineFilter, setPipelineFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
   const activeRequest = useRef(0);
@@ -96,11 +97,12 @@ export default function Dashboard() {
 
     const isStale = () => requestId !== activeRequest.current;
     const qParam = quarter ? `&quarter=${quarter}` : "";
+    const pParam = pipelineFilter !== "all" ? `&pipeline=${pipelineFilter}` : "";
 
     try {
       const [recentRes, growthRes, renewalRes, valueRes, closedWonRes, pipelinesRes] =
         await Promise.all([
-          fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}`),
+          fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}`),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
           fetch("/api/hubspot?type=pipeline-value"),
@@ -151,7 +153,7 @@ export default function Dashboard() {
       }
 
       // Fetch changelog separately (can be larger)
-      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}`);
+      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}`);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
         if (!isStale()) setChangelog(d.changelogs || []);
@@ -162,7 +164,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     }
-  }, [quarter]);
+  }, [quarter, pipelineFilter]);
 
   useEffect(() => {
     fetchData();
@@ -207,22 +209,54 @@ export default function Dashboard() {
       />
 
       <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 py-6 space-y-6">
-        {/* Quarter filter + pipeline summary */}
+        {/* Filters bar */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-[var(--text-muted)]">QUARTER:</span>
-            <select
-              value={quarter}
-              onChange={(e) => setQuarter(e.target.value)}
-              className="font-mono text-xs bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-primary)] rounded px-2 py-1.5 cursor-pointer hover:border-[var(--accent-blue)] transition-colors"
-            >
-              {getQuarterOptions().map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+          <div className="flex items-center gap-4">
+            {/* Quarter filter */}
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase">QTR</span>
+              <select
+                value={quarter}
+                onChange={(e) => setQuarter(e.target.value)}
+                className="font-mono text-xs bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-primary)] rounded px-2 py-1.5 cursor-pointer hover:border-[var(--accent-blue)] transition-colors"
+              >
+                {getQuarterOptions().map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Pipeline filter */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPipelineFilter("all")}
+                className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                  pipelineFilter === "all"
+                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                    : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                ALL
+              </button>
+              {pipelines.slice(0, 5).map((p) => (
+                <button
+                  key={p.pipeline}
+                  onClick={() => setPipelineFilter(p.pipeline)}
+                  className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                    pipelineFilter === p.pipeline
+                      ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                      : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  }`}
+                >
+                  {p.pipeline_name}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
+
+          {/* Pipeline deal counts */}
           <div className="flex items-center gap-4">
             {pipelines.slice(0, 5).map((p) => (
               <span
@@ -327,7 +361,7 @@ export default function Dashboard() {
         <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
-              CEO Dashboard v1.1 &middot; HubSpot Pipeline Changelog
+              CEO Dashboard v1.2 &middot; HubSpot Pipeline Changelog
             </span>
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
               auto-refresh: 2min &middot; hub:{" "}
