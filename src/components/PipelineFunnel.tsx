@@ -4,6 +4,7 @@ interface StageData {
   stageId: string;
   label: string;
   count: number;
+  total_value: number;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -30,6 +31,7 @@ const STAGE_COLORS: Record<string, string> = {
   "Negotiation": "#f59e0b",
   "Renewed": "var(--accent-green)",
   "Closed Lost": "var(--accent-red)",
+  "Closed Won / Renewed": "var(--accent-green)",
 };
 
 function getStageColor(label: string): string {
@@ -43,24 +45,47 @@ function getStageColor(label: string): string {
   return "var(--text-muted)";
 }
 
+function formatValue(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${v.toFixed(0)}`;
+}
+
 export function PipelineFunnel({
   stages,
   title = "Pipeline",
+  totalCount = 0,
+  totalValue = 0,
 }: {
   stages: StageData[];
   title?: string;
+  totalCount?: number;
+  totalValue?: number;
 }) {
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 
   return (
     <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="font-mono text-xs text-[var(--accent-blue)]">
-          &gt;
-        </span>
-        <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-          {title}
-        </h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-[var(--accent-blue)]">
+            &gt;
+          </span>
+          <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+            {title}
+          </h2>
+        </div>
+        {/* Rollup totals */}
+        {totalCount > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+              {totalCount} <span className="text-[var(--text-muted)]">deals</span>
+            </span>
+            <span className="font-mono text-[10px] font-semibold text-[var(--accent-green)]">
+              {formatValue(totalValue)}
+            </span>
+          </div>
+        )}
       </div>
       <div className="space-y-2.5">
         {stages.map((stage) => {
@@ -72,12 +97,17 @@ export function PipelineFunnel({
                 <span className="font-mono text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
                   {stage.label}
                 </span>
-                <span
-                  className="font-mono text-xs font-bold"
-                  style={{ color }}
-                >
-                  {stage.count}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[10px] text-[var(--text-muted)]">
+                    {formatValue(stage.total_value || 0)}
+                  </span>
+                  <span
+                    className="font-mono text-xs font-bold w-8 text-right"
+                    style={{ color }}
+                  >
+                    {stage.count}
+                  </span>
+                </div>
               </div>
               <div className="h-1.5 bg-[var(--bg-primary)] rounded-full overflow-hidden">
                 <div

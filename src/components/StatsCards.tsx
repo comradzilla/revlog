@@ -10,15 +10,27 @@ interface Stats {
   quarterLabel?: string;
 }
 
+function formatDollars(value: number): string {
+  if (value >= 1_000_000) {
+    const m = value / 1_000_000;
+    return `$${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    const k = value / 1_000;
+    return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(0)}K`;
+  }
+  return `$${value.toFixed(0)}`;
+}
+
 export function StatsCards({ stats }: { stats: Stats }) {
   const quarterDisplay = stats.quarterLabel
-    ? stats.quarterLabel.replace("-", " ")
+    ? stats.quarterLabel.replace(/,/g, " + ").replace(/-/g, " ")
     : "MTD";
 
   const cards = [
     {
       label: "Open Pipeline (All)",
-      value: `$${(stats.totalOpenValue / 1000).toFixed(0)}K`,
+      value: formatDollars(stats.totalOpenValue),
       sub: `${stats.totalOpenDeals} deals across all pipelines`,
       color: "var(--accent-blue)",
       icon: "~",
@@ -39,7 +51,7 @@ export function StatsCards({ stats }: { stats: Stats }) {
     },
     {
       label: `Closed Won (${quarterDisplay})`,
-      value: `$${(stats.closedWonValue / 1000).toFixed(0)}K`,
+      value: formatDollars(stats.closedWonValue),
       sub: `${stats.closedWonThisMonth} deals`,
       color: "var(--accent-green)",
       icon: "$",

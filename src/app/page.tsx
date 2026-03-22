@@ -39,6 +39,7 @@ interface StageData {
   stageId: string;
   label: string;
   count: number;
+  total_value: number;
 }
 
 interface PipelineInfo {
@@ -74,7 +75,9 @@ export default function Dashboard() {
   const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
   const [recentDeals, setRecentDeals] = useState<DealEntry[]>([]);
   const [growthStages, setGrowthStages] = useState<StageData[]>([]);
+  const [growthTotals, setGrowthTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [renewalStages, setRenewalStages] = useState<StageData[]>([]);
+  const [renewalTotals, setRenewalTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [pipelineValue, setPipelineValue] = useState({
     totalValue: 0,
     count: 0,
@@ -84,11 +87,22 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
-  const [quarter, setQuarter] = useState(getCurrentQuarter());
+  const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
   const activeRequest = useRef(0);
+
+  const toggleQuarter = (qtr: string) => {
+    setSelectedQuarters(prev => {
+      if (prev.includes(qtr)) {
+        // Don't allow deselecting all — keep at least one
+        if (prev.length === 1) return prev;
+        return prev.filter(q => q !== qtr);
+      }
+      return [...prev, qtr];
+    });
+  };
 
   const fetchData = useCallback(async () => {
     const requestId = ++activeRequest.current;
@@ -96,7 +110,7 @@ export default function Dashboard() {
     setError(null);
 
     const isStale = () => requestId !== activeRequest.current;
-    const qParam = quarter ? `&quarter=${quarter}` : "";
+    const qParam = selectedQuarters.length > 0 ? `&quarter=${selectedQuarters.join(",")}` : "";
     const pParam = pipelineFilter !== "all" ? `&pipeline=${pipelineFilter}` : "";
 
     try {
@@ -120,11 +134,19 @@ export default function Dashboard() {
       }
       if (growthRes.ok) {
         const d = await growthRes.json();
-        if (!isStale()) { setGrowthStages(d.stats || []); anySuccess = true; }
+        if (!isStale()) {
+          setGrowthStages(d.stats || []);
+          setGrowthTotals({ totalCount: d.totalCount || 0, totalValue: d.totalValue || 0 });
+          anySuccess = true;
+        }
       }
       if (renewalRes.ok) {
         const d = await renewalRes.json();
-        if (!isStale()) { setRenewalStages(d.stats || []); anySuccess = true; }
+        if (!isStale()) {
+          setRenewalStages(d.stats || []);
+          setRenewalTotals({ totalCount: d.totalCount || 0, totalValue: d.totalValue || 0 });
+          anySuccess = true;
+        }
       }
       if (valueRes.ok) {
         const d = await valueRes.json();
@@ -164,7 +186,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     }
-  }, [quarter, pipelineFilter]);
+  }, [selectedQuarters, pipelineFilter]);
 
   useEffect(() => {
     fetchData();
@@ -187,6 +209,10 @@ export default function Dashboard() {
     (c) => new Date(c.timestamp) >= weekStart
   ).length;
 
+  const quarterLabel = selectedQuarters.length <= 2
+    ? selectedQuarters.join(",")
+    : `${selectedQuarters.length} qtrs`;
+
   const stats = {
     totalOpenDeals: pipelineValue.count,
     totalOpenValue: pipelineValue.totalValue,
@@ -194,7 +220,7 @@ export default function Dashboard() {
     weekChanges,
     closedWonThisMonth: closedWon.count,
     closedWonValue: closedWon.totalValue,
-    quarterLabel: quarter,
+    quarterLabel,
   };
 
   // Total deals across all pipelines
@@ -212,23 +238,27 @@ export default function Dashboard() {
         {/* Filters bar */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
-            {/* Quarter filter */}
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase">QTR</span>
-              <select
-                value={quarter}
-                onChange={(e) => setQuarter(e.target.value)}
-                className="font-mono text-xs bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-primary)] rounded px-2 py-1.5 cursor-pointer hover:border-[var(--accent-blue)] transition-colors"
-              >
-                {getQuarterOptions().map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+            {/* Quarter multi-select */}
+            <div className="flex items-center gap-1">
+              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase mr-1">QTR</span>
+              {getQuarterOptions().map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => toggleQuarter(opt.value)}
+                  className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                    selectedQuarters.includes(opt.value)
+                      ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                      : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* Pipeline filter */}
+          {/* Pipeline filter + counts */}
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPipelineFilter("all")}
@@ -254,10 +284,7 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Pipeline deal counts */}
-          <div className="flex items-center gap-4">
+            <div className="h-4 w-px bg-[var(--border-color)]" />
             {pipelines.slice(0, 5).map((p) => (
               <span
                 key={p.pipeline}
@@ -349,9 +376,19 @@ export default function Dashboard() {
 
           {/* Sidebar */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-            <PipelineFunnel stages={growthStages} title="Growth Pipeline" />
+            <PipelineFunnel
+              stages={growthStages}
+              title="Growth Pipeline"
+              totalCount={growthTotals.totalCount}
+              totalValue={growthTotals.totalValue}
+            />
             {renewalStages.length > 0 && (
-              <PipelineFunnel stages={renewalStages} title="Renewal Pipeline" />
+              <PipelineFunnel
+                stages={renewalStages}
+                title="Renewal Pipeline"
+                totalCount={renewalTotals.totalCount}
+                totalValue={renewalTotals.totalValue}
+              />
             )}
             <RecentDeals deals={recentDeals} />
           </div>
@@ -361,7 +398,7 @@ export default function Dashboard() {
         <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
-              CEO Dashboard v1.2 &middot; HubSpot Pipeline Changelog
+              CEO Dashboard v1.3 &middot; HubSpot Pipeline Changelog
             </span>
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
               auto-refresh: 2min &middot; hub:{" "}

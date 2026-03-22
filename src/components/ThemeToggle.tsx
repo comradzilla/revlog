@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type Theme = "terminal" | "chromatic" | "light";
 
-const THEMES: { key: Theme; label: string; icon: JSX.Element }[] = [
+const THEMES: { key: Theme; label: string; icon: ReactNode }[] = [
   {
     key: "terminal",
     label: "Terminal",

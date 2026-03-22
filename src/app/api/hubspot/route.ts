@@ -2,24 +2,44 @@ import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Parse quarter param like "2025-Q1" into start/end dates
-function parseQuarter(q: string | null): { start: Date; end: Date } | null {
-  if (!q) return null;
-  const match = q.match(/^(\d{4})-Q([1-4])$/);
-  if (!match) return null;
-  const year = parseInt(match[1]);
-  const quarter = parseInt(match[2]);
-  const startMonth = (quarter - 1) * 3;
-  return {
-    start: new Date(year, startMonth, 1),
-    end: new Date(year, startMonth + 3, 1),
-  };
+// Parse quarter param(s) like "2025-Q1" or "2025-Q1,2025-Q2" into date ranges
+function parseQuarters(q: string | null): { start: Date; end: Date }[] {
+  if (!q) return [];
+  return q.split(",").map(part => {
+    const match = part.trim().match(/^(\d{4})-Q([1-4])$/);
+    if (!match) return null;
+    const year = parseInt(match[1]);
+    const quarter = parseInt(match[2]);
+    const startMonth = (quarter - 1) * 3;
+    return {
+      start: new Date(year, startMonth, 1),
+      end: new Date(year, startMonth + 3, 1),
+    };
+  }).filter(Boolean) as { start: Date; end: Date }[];
+}
+
+// Build SQL condition for multiple quarter ranges
+function quarterCondition(
+  quarters: { start: Date; end: Date }[],
+  column: string,
+  params: (string | number | Date)[],
+): string {
+  if (quarters.length === 0) return "";
+  if (quarters.length === 1) {
+    params.push(quarters[0].start.toISOString(), quarters[0].end.toISOString());
+    return `${column} >= $${params.length - 1} AND ${column} < $${params.length}`;
+  }
+  const parts = quarters.map(q => {
+    params.push(q.start.toISOString(), q.end.toISOString());
+    return `(${column} >= $${params.length - 1} AND ${column} < $${params.length})`;
+  });
+  return `(${parts.join(" OR ")})`;
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") || "changelog";
-  const quarterRange = parseQuarter(searchParams.get("quarter"));
+  const quarters = parseQuarters(searchParams.get("quarter"));
   const pipelineFilter = searchParams.get("pipeline");
 
   try {
@@ -33,10 +53,8 @@ export async function GET(request: Request) {
         const params: (string | number | Date)[] = [];
         const conditions: string[] = [];
 
-        if (quarterRange) {
-          params.push(quarterRange.start.toISOString(), quarterRange.end.toISOString());
-          conditions.push(`changed_at >= $${params.length - 1} AND changed_at < $${params.length}`);
-        }
+        const qc = quarterCondition(quarters, "changed_at", params);
+        if (qc) conditions.push(qc);
 
         if (pipelineFilter && pipelineFilter !== "all") {
           params.push(pipelineFilter);
@@ -69,15 +87,12 @@ export async function GET(request: Request) {
       }
 
       case "recently-changed": {
-        // Only deals with actual stage or amount changes, ordered by most recent change
         const limit = parseInt(searchParams.get("limit") || "15");
         const params: (string | number | Date)[] = [];
         const conditions: string[] = [];
 
-        if (quarterRange) {
-          params.push(quarterRange.start.toISOString(), quarterRange.end.toISOString());
-          conditions.push(`cl.changed_at >= $${params.length - 1} AND cl.changed_at < $${params.length}`);
-        }
+        const qc = quarterCondition(quarters, "cl.changed_at", params);
+        if (qc) conditions.push(qc);
 
         if (pipelineFilter && pipelineFilter !== "all") {
           params.push(pipelineFilter);
@@ -122,18 +137,28 @@ export async function GET(request: Request) {
       case "pipeline-stats": {
         const pipelineId = searchParams.get("pipeline") || "4207989";
         const result = await query(
-          `SELECT deal_stage as "stageId", stage_name as label, COUNT(*)::integer as count
+          `SELECT deal_stage as "stageId", stage_name as label,
+                  COUNT(*)::integer as count,
+                  COALESCE(SUM(amount), 0)::numeric as total_value
            FROM deals
            WHERE pipeline = $1
            GROUP BY deal_stage, stage_name
            ORDER BY stage_name`,
           [pipelineId]
         );
-        return Response.json({ stats: result.rows });
+        // Also compute rollup totals
+        const stats = result.rows.map((r: Record<string, string>) => ({
+          stageId: r.stageId,
+          label: r.label,
+          count: parseInt(String(r.count)),
+          total_value: parseFloat(String(r.total_value)),
+        }));
+        const totalCount = stats.reduce((s, r) => s + r.count, 0);
+        const totalValue = stats.reduce((s, r) => s + r.total_value, 0);
+        return Response.json({ stats, totalCount, totalValue });
       }
 
       case "pipeline-value": {
-        // Open pipeline value — exclude closed won/lost stages
         const result = await query(
           `SELECT COUNT(*)::integer as count, COALESCE(SUM(amount), 0)::numeric as total_value
            FROM deals
@@ -150,7 +175,6 @@ export async function GET(request: Request) {
       }
 
       case "pipeline-list": {
-        // Return all pipelines with deal counts
         const result = await query(
           `SELECT pipeline, pipeline_name, COUNT(*)::integer as deal_count
            FROM deals
@@ -162,48 +186,36 @@ export async function GET(request: Request) {
       }
 
       case "closed-won": {
-        // Closed Won value with quarter filtering
-        // Use changelog to find deals that moved to closed won within the quarter
-        if (quarterRange) {
-          const result = await query(
-            `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
-                    COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
-             FROM deal_changelog cl
-             JOIN deals d ON d.id = cl.deal_id
-             WHERE cl.property = 'dealstage'
-               AND (cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%renewed%')
-               AND cl.changed_at >= $1 AND cl.changed_at < $2`,
-            [quarterRange.start.toISOString(), quarterRange.end.toISOString()]
-          );
-          const row = result.rows[0];
-          return Response.json({
-            totalValue: parseFloat(row.total_value),
-            count: row.count,
-          });
+        const params: (string | number | Date)[] = [];
+        let dateCondition: string;
+
+        if (quarters.length > 0) {
+          dateCondition = quarterCondition(quarters, "cl.changed_at", params);
         } else {
-          // Default: current month
           const now = new Date();
           const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          const result = await query(
-            `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
-                    COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
-             FROM deal_changelog cl
-             JOIN deals d ON d.id = cl.deal_id
-             WHERE cl.property = 'dealstage'
-               AND (cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%renewed%')
-               AND cl.changed_at >= $1`,
-            [monthStart.toISOString()]
-          );
-          const row = result.rows[0];
-          return Response.json({
-            totalValue: parseFloat(row.total_value),
-            count: row.count,
-          });
+          params.push(monthStart.toISOString());
+          dateCondition = `cl.changed_at >= $${params.length}`;
         }
+
+        const result = await query(
+          `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
+                  COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
+           FROM deal_changelog cl
+           JOIN deals d ON d.id = cl.deal_id
+           WHERE cl.property = 'dealstage'
+             AND (cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%renewed%')
+             AND ${dateCondition}`,
+          params
+        );
+        const row = result.rows[0];
+        return Response.json({
+          totalValue: parseFloat(row.total_value),
+          count: row.count,
+        });
       }
 
       case "deal-types": {
-        // Return distinct deal types
         const result = await query(
           `SELECT DISTINCT deal_type, COUNT(*)::integer as count
            FROM deals
@@ -239,7 +251,6 @@ export async function GET(request: Request) {
       }
 
       case "snapshot-history": {
-        // Return snapshot counts for tracking
         const result = await query(
           `SELECT
              time_bucket('1 day', snapshot_time) AS day,
