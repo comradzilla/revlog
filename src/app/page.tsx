@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { StatusBar } from "@/components/StatusBar";
 import { StatsCards } from "@/components/StatsCards";
 import { PipelineFunnel } from "@/components/PipelineFunnel";
@@ -526,7 +527,10 @@ export default function Dashboard() {
         <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
-              CEO Dashboard v2.0 &middot; HubSpot Pipeline Intelligence
+              CEO Dashboard v2.0 &middot; HubSpot Pipeline Intelligence &middot;{" "}
+              <Link href="/updates" className="text-[var(--accent-blue)] hover:underline">
+                updates &amp; dev notes
+              </Link>
             </span>
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
               auto-refresh: 2min &middot; hub:{" "}
