@@ -12,6 +12,23 @@ interface Update {
 
 const UPDATES: Update[] = [
   {
+    version: "2.1",
+    date: "2026-03-23",
+    title: "Smart Sync Architecture",
+    description:
+      "Three-tier sync replaces monolithic full-sync-every-time with incremental updates. Data freshness drops from 90s+ to 2-3s without external cron dependencies.",
+    changes: [
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Tier 1: Incremental sync every 5 min — only fetches deals changed since last sync (typically 0-5 deals, ~2-3s)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Tier 2: Full sync daily at 2 AM — complete deal scan, owner refresh, 7-day changelog window (no 50-deal limit)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Tier 3: On-demand sync via POST /api/sync — manual trigger from dashboard or curl" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Self-contained scheduler via Next.js instrumentation hook — no external cron needed" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "StatusBar shows sync tier timestamps: 'incr: 3m ago · full: 14h ago'" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "HubSpot hs_lastmodifieddate GTE filter for incremental — returns only changed deals instead of all 3,022" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "Cron route accepts ?tier=incremental|full parameter (defaults to incremental)" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Full sync changelog window expanded from 50 most recent deals to all deals modified in last 7 days" },
+    ],
+  },
+  {
     version: "2.0",
     date: "2026-03-23",
     title: "Pipeline Intelligence",
@@ -118,7 +135,10 @@ const DEV_NOTES = [
   {
     title: "Sync Strategy",
     notes: [
-      "Full sync: owners (active+archived) → all deals (paginated) → changelog (50 most recent deals) → pipeline snapshot",
+      "Three-tier: incremental (5 min, ~2-3s) → full daily (2 AM, ~60-90s) → on-demand (manual)",
+      "Incremental uses HubSpot hs_lastmodifieddate GTE filter — only changed deals",
+      "Full sync: owners → all deals (paginated) → 7-day changelog window → pipeline snapshot",
+      "Self-scheduling via Next.js instrumentation hook — no external cron",
       "Changelog deduplication: checks deal_id + property + changed_at before insert",
       "Properties tracked: dealstage, amount, closedate, hubspot_owner_id",
       "Deal creation events generated from deals.created_at during sync",

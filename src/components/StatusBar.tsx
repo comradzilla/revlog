@@ -2,14 +2,33 @@
 
 import { ThemeToggle } from "./ThemeToggle";
 
+function timeAgoShort(isoString: string | null): string {
+  if (!isoString) return "never";
+  const diff = Date.now() - new Date(isoString).getTime();
+  if (diff < 0) return "just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
+}
+
+export interface SyncMeta {
+  lastIncremental: string | null;
+  lastFull: string | null;
+}
+
 export function StatusBar({
   lastUpdated,
   isLoading,
   onRefresh,
+  syncMeta,
 }: {
   lastUpdated: string | null;
   isLoading: boolean;
   onRefresh: () => void;
+  syncMeta?: SyncMeta | null;
 }) {
   return (
     <header className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-sm sticky top-0 z-50 transition-colors duration-300">
@@ -29,7 +48,17 @@ export function StatusBar({
         </div>
 
         <div className="flex items-center gap-3">
-          {lastUpdated && (
+          {/* Sync tier timestamps */}
+          {syncMeta && (
+            <span className="font-mono text-[10px] text-[var(--text-muted)] hidden sm:inline">
+              <span className="text-[var(--accent-green)]">incr</span>:{" "}
+              {timeAgoShort(syncMeta.lastIncremental)}
+              <span className="mx-1">·</span>
+              <span className="text-[var(--accent-blue)]">full</span>:{" "}
+              {timeAgoShort(syncMeta.lastFull)}
+            </span>
+          )}
+          {!syncMeta && lastUpdated && (
             <span className="font-mono text-xs text-[var(--text-muted)]">
               synced {lastUpdated}
             </span>

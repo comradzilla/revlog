@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { StatusBar } from "@/components/StatusBar";
+import { StatusBar, type SyncMeta } from "@/components/StatusBar";
 import { StatsCards } from "@/components/StatsCards";
 import { PipelineFunnel } from "@/components/PipelineFunnel";
 import { ChangelogFeed } from "@/components/ChangelogFeed";
@@ -138,6 +138,7 @@ export default function Dashboard() {
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const [filter, setFilter] = useState("all");
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [pipelineFilter, setPipelineFilter] = useState("all");
@@ -265,11 +266,26 @@ export default function Dashboard() {
         setIsLoading(false);
       }
 
-      // Fetch changelog separately (can be larger)
-      const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`);
+      // Fetch changelog and sync metadata separately
+      const [changelogRes, syncMetaRes] = await Promise.all([
+        fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`),
+        fetch("/api/hubspot?type=sync-status"),
+      ]);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
         if (!isStale()) setChangelog(d.changelogs || []);
+      }
+      if (syncMetaRes.ok && !isStale()) {
+        const d = await syncMetaRes.json();
+        const meta = (d.meta || []) as { key: string; value: string }[];
+        const incr = meta.find((m) => m.key === "last_incremental_sync");
+        const full = meta.find((m) => m.key === "last_full_sync");
+        if (!isStale()) {
+          setSyncMeta({
+            lastIncremental: incr?.value || null,
+            lastFull: full?.value || null,
+          });
+        }
       }
     } catch {
       if (!isStale()) {
@@ -325,6 +341,7 @@ export default function Dashboard() {
         lastUpdated={lastUpdated}
         isLoading={isLoading}
         onRefresh={() => fetchData()}
+        syncMeta={syncMeta}
       />
 
       <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 py-6 space-y-6">
