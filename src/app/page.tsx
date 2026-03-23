@@ -477,7 +477,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Changelog - main column */}
           <div className="lg:col-span-7 xl:col-span-8">
-            <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
+            <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-3 sm:p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-[var(--accent-orange)]">

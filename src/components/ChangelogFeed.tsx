@@ -170,7 +170,7 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
       </div>
 
       {/* Line 2 (mobile: tags + change) / Desktop: inline */}
-      <div className="flex items-center gap-1.5 sm:contents pl-[60px] sm:pl-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 sm:contents pl-[56px] sm:pl-0 overflow-hidden min-w-0">
         {/* Pipeline tag */}
         <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] uppercase shrink-0">
           {entry.pipelineName}
@@ -215,7 +215,7 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
         )}
 
         {/* Change values */}
-        <span className="flex items-center gap-1.5 shrink-0 sm:ml-auto">
+        <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 sm:shrink-0 sm:ml-auto whitespace-nowrap">
         {isStageChange && (
           <>
             <span className="text-[var(--text-muted)]">{entry.oldLabel.replace(/^\d+\s*-\s*/, "")}</span>
