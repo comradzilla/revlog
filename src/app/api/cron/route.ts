@@ -13,7 +13,12 @@ export async function GET(request: Request) {
   const secret = searchParams.get("secret");
   const expectedSecret = process.env.CRON_SECRET;
 
-  if (expectedSecret && secret !== expectedSecret) {
+  if (!expectedSecret) {
+    if (process.env.NODE_ENV === "production") {
+      return Response.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+    }
+    console.warn("[cron] WARNING: CRON_SECRET not set, allowing unauthenticated access");
+  } else if (secret !== expectedSecret) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

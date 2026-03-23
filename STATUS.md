@@ -11,14 +11,16 @@ Last updated: 2026-03-23
 | Item | Value |
 |------|-------|
 | Branch | `v2-pipeline-intelligence` (not merged to main yet) |
-| Last version | v2.1 |
+| Last version | v2.2 |
 | Build | Passing (`npm run build` succeeds) |
 | Database | ~3,022 deals, 5 pipelines, ~57 stage label mappings |
 | HubSpot Hub ID | 3282655 |
 | HubSpot API budget | 1M calls/day (currently using ~5K/day) |
 | Sync | Three-tier: incremental every 5min (~2-3s), full daily 2AM (~60-90s), on-demand |
 | Frontend | Client-side React dashboard with 2-minute auto-refresh |
-| Server | Not yet deployed to production (running locally) |
+| Server | DigitalOcean Droplet (Premium Intel, 2GB), live at app.revradar.io |
+| Auth | Password login + httpOnly session cookie (7-day expiry) + middleware route protection |
+| Mobile | Responsive "log mode" — changelog as hero, filter drawer, tabbed sidebar |
 
 ---
 
@@ -65,6 +67,23 @@ Last updated: 2026-03-23
 - [x] Deduplication on changelog inserts (deal_id + property + changed_at)
 - [x] Pipeline snapshots with weighted values
 
+### Authentication (v2.2)
+- [x] Password login page (terminal-styled, supports all 3 themes)
+- [x] httpOnly session cookie with HMAC-SHA256 signing (Web Crypto API, Edge runtime)
+- [x] Next.js middleware route protection (redirects unauthenticated to /login)
+- [x] 7-day session expiry with constant-time password comparison
+- [x] Logout button in StatusBar
+- [x] API routes return 401 JSON when unauthenticated
+- [x] CRON_SECRET bypass bug fixed (undefined secret no longer skips auth)
+
+### Mobile Responsive (v2.2)
+- [x] MobileStatsSummary — compact single-line stats bar (pipeline, today, won, lost)
+- [x] MobileFilterDrawer — slide-up drawer with all filters (quarter, deal type, pipeline, change type)
+- [x] MobileSidebarTabs — tabbed Funnels/Stale/Recent view below changelog
+- [x] ChangelogFeed two-line mobile rows (time + deal on line 1, tags + change on line 2)
+- [x] Desktop layout completely unchanged
+- [x] All 3 themes work on mobile
+
 ### Infrastructure
 - [x] TimescaleDB schema with hypertables, indexes, views
 - [x] 16 API endpoint types via /api/hubspot?type=
@@ -74,14 +93,15 @@ Last updated: 2026-03-23
 - [x] Setup script (first-time server provisioning)
 - [x] Deploy script (pull + build + restart)
 - [x] Updates/dev notes page at /updates
+- [x] DigitalOcean deployment with SSL (Certbot) at app.revradar.io
 
 ---
 
 ## What Is Next
 
-### Immediate (pre-merge)
-- [ ] Deploy to DigitalOcean Droplet (Ubuntu 24.04, 2GB RAM, $12/mo)
-- [ ] Domain + SSL setup with Certbot
+### Immediate
+- [ ] Set DASHBOARD_PASSWORD and SESSION_SECRET env vars on production server
+- [ ] Deploy v2.2 to server (git pull + build + pm2 restart)
 - [ ] Merge `v2-pipeline-intelligence` branch to `main`
 
 ### Short-term
@@ -94,8 +114,7 @@ Last updated: 2026-03-23
 - [ ] Pipeline trend charts (data exists in pipeline_snapshots, needs frontend chart)
 - [ ] Forecast model using weighted pipeline + historical win rates
 - [ ] Deal velocity metrics (average time through each stage)
-- [ ] Mobile-responsive layout refinements
-- [ ] Authentication (currently open, relies on network-level access control)
+- [ ] Multi-user auth with role-based access
 
 ---
 

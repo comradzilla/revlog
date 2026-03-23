@@ -4,6 +4,61 @@ Detailed version history for RevLog. Each entry documents what changed, why, and
 
 ---
 
+## v2.2 (2026-03-23) -- Authentication + Mobile Log Mode
+
+**Theme:** Secure the dashboard with password auth and make it usable on mobile with a changelog-first "log mode" layout.
+
+### What Changed
+
+**Authentication:**
+- Password login page with terminal aesthetic (supports all 3 themes)
+- httpOnly session cookie with HMAC-SHA256 signing via Web Crypto API (Edge runtime compatible)
+- Next.js middleware protects all routes — redirects pages to /login, returns 401 JSON for API routes
+- 7-day session expiry, constant-time password comparison to prevent timing attacks
+- Logout button added to StatusBar (door-exit icon, red hover)
+- CRON_SECRET bypass bug fixed: undefined secret no longer skips auth check in production
+- Graceful dev mode: if SESSION_SECRET not set, middleware allows access (no auth in local dev)
+
+**Mobile Responsive:**
+- MobileStatsSummary: single-line compact stats bar ($16.3M pipeline | 2 today | $42K won | $125K lost)
+- MobileFilterDrawer: slide-up bottom drawer with all filters (quarter, deal type, pipeline, change type)
+- MobileSidebarTabs: tabbed Funnels/Stale/Recent view replaces stacked sidebar on mobile
+- ChangelogFeed: two-line mobile rows (line 1: time + deal name, line 2: tags + change values)
+- Desktop layout completely unchanged — all mobile components use sm:hidden / hidden sm:flex breakpoints
+- Drawer slide-up animation with backdrop overlay
+
+### Why
+
+The dashboard had sensitive deal data (customer names, pipeline values) publicly accessible. Password auth was the minimum viable security. Mobile responsiveness was needed because the CEO checks the dashboard on his phone — the previous layout broke on small screens (filter bar overflow, sidebar stacking, changelog rows wrapping).
+
+### Files Created
+
+- `src/lib/auth.ts` -- HMAC token creation/verification (Web Crypto API)
+- `src/middleware.ts` -- Route protection middleware
+- `src/app/login/page.tsx` -- Terminal-styled login page
+- `src/app/api/auth/login/route.ts` -- Login endpoint (validates password, sets cookie)
+- `src/app/api/auth/logout/route.ts` -- Logout endpoint (clears cookie)
+- `src/components/MobileFilterDrawer.tsx` -- Slide-up filter drawer
+- `src/components/MobileStatsSummary.tsx` -- Compact stats bar
+- `src/components/MobileSidebarTabs.tsx` -- Tabbed sidebar view
+
+### Files Modified
+
+- `src/components/StatusBar.tsx` -- Added logout button
+- `src/app/api/cron/route.ts` -- Fixed CRON_SECRET bypass bug
+- `src/components/ChangelogFeed.tsx` -- Two-line mobile rows (flex-col sm:flex-row)
+- `src/app/page.tsx` -- Responsive breakpoints, mobile components, MobileFilterDrawer render
+- `src/app/globals.css` -- Drawer slide-up animation, mobile changelog spacing
+
+### Design Decisions
+
+- **Web Crypto API over Node.js crypto:** Middleware runs in Edge runtime, which doesn't support Node.js `crypto` module. Web Crypto API (`crypto.subtle`) works in both Edge and Node.js runtimes.
+- **No database sessions:** Stateless HMAC token in cookie, verified on each request. No session table needed.
+- **Progressive mobile enhancement:** Same page, responsive CSS. No separate mobile route. Changelog is the hero on mobile because that's the primary thing the CEO checks.
+- **MobileFilterDrawer at component tree root:** Rendered outside `<main>` for fixed positioning to work correctly with the backdrop overlay.
+
+---
+
 ## v2.1 (2026-03-23) -- Smart Sync Architecture
 
 **Theme:** Replace the monolithic full-sync-every-time approach with a three-tier sync that keeps data fresh in 2-3 seconds instead of 90+ seconds.

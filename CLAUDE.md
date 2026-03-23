@@ -17,26 +17,35 @@ This is a Next.js 16.2.0 + TimescaleDB dashboard that tracks every pipeline chan
 src/
 ├── app/
 │   ├── api/
+│   │   ├── auth/
+│   │   │   ├── login/route.ts    # POST: validate password, set session cookie
+│   │   │   └── logout/route.ts   # POST: clear session cookie
 │   │   ├── cron/route.ts         # Cron endpoint (?tier=incremental|full)
 │   │   ├── hubspot/route.ts      # All 16 read endpoints (reads from Postgres)
 │   │   └── sync/route.ts         # Manual sync trigger (POST)
+│   ├── login/page.tsx            # Terminal-styled password login page
 │   ├── page.tsx                  # Main dashboard ("use client", 12+ parallel fetches)
 │   ├── updates/page.tsx          # Product changelog + dev notes
-│   ├── globals.css               # Tailwind v4 + CSS variables (3 themes)
+│   ├── globals.css               # Tailwind v4 + CSS variables (3 themes) + mobile animations
 │   └── layout.tsx                # Root layout (Geist fonts)
 ├── components/
-│   ├── ChangelogFeed.tsx         # Console-log style changelog (5 property types)
+│   ├── ChangelogFeed.tsx         # Console-log style changelog (5 property types, mobile 2-line rows)
+│   ├── MobileFilterDrawer.tsx    # Slide-up filter drawer (sm:hidden)
+│   ├── MobileStatsSummary.tsx    # Compact single-line stats bar (sm:hidden)
+│   ├── MobileSidebarTabs.tsx     # Tabbed Funnels/Stale/Recent (lg:hidden)
 │   ├── PipelineFunnel.tsx        # Stage funnel with inline filter support
 │   ├── StatsCards.tsx            # 5 metric cards (pipeline, changes, won, lost)
 │   ├── NetMovementBar.tsx        # Created/won/lost + amount grew/shrank
 │   ├── StaleDealsList.tsx        # 30+ day idle deals warning
 │   ├── RecentDeals.tsx           # Time-in-stage badges
-│   ├── StatusBar.tsx             # Header with sync tier timestamps
+│   ├── StatusBar.tsx             # Header with sync tier timestamps + logout button
 │   └── ThemeToggle.tsx           # Terminal / Console / Light
 ├── lib/
+│   ├── auth.ts                   # HMAC session token (Web Crypto API, Edge compatible)
 │   ├── db.ts                     # Postgres connection pool
 │   ├── hubspot.ts                # HubSpot API, stage labels, stage weights, pipelines
 │   └── sync.ts                   # THREE-TIER SYNC (incremental + full + on-demand)
+├── middleware.ts                 # Route protection (redirects to /login, 401 for API)
 └── instrumentation.ts            # Auto-scheduler (5-min incremental, daily full at 2AM)
 ```
 
@@ -69,6 +78,23 @@ src/
 3. **Tier 3 — On-Demand**: POST `/api/sync` for manual trigger.
 
 Self-scheduling via `src/instrumentation.ts` — no external cron needed. HubSpot gives us 1M API calls/day; we use ~5K.
+
+## Authentication
+
+- Password-based login: `DASHBOARD_PASSWORD` env var, validated with constant-time comparison
+- Session: httpOnly cookie (`revradar_session`) with HMAC-SHA256 signed timestamp, 7-day expiry
+- `src/lib/auth.ts` uses Web Crypto API (`crypto.subtle`), NOT Node.js `crypto` — middleware runs in Edge runtime
+- Middleware exemptions: `/login`, `/api/auth/*`, `/api/cron` (has own CRON_SECRET), `/_next/*`, `/favicon.ico`
+- If `SESSION_SECRET` env var is not set, middleware allows all access (dev mode convenience)
+- Env vars needed on server: `DASHBOARD_PASSWORD`, `SESSION_SECRET` (any random string)
+
+## Mobile Layout
+
+- Breakpoint: `sm:` (640px) for most mobile/desktop splits, `lg:` (1024px) for sidebar
+- Mobile components: `MobileStatsSummary` (sm:hidden), `MobileFilterDrawer` (sm:hidden), `MobileSidebarTabs` (lg:hidden)
+- ChangelogFeed rows: `flex flex-col sm:flex-row` — two lines on mobile, one line on desktop
+- MobileFilterDrawer rendered at root level (outside `<main>`) for fixed positioning
+- Desktop layout is completely unchanged — mobile components are additive with responsive hiding
 
 ## Key Behaviors & Gotchas
 

@@ -154,58 +154,68 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
       href={`https://app.hubspot.com/contacts/3282655/record/0-3/${entry.dealId}`}
       target="_blank"
       rel="noopener noreferrer"
-      className={`changelog-entry flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group ${rowBorderClass}`}
+      className={`changelog-entry flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group ${rowBorderClass}`}
     >
-      {/* Timestamp */}
-      <span className="text-[var(--text-muted)] shrink-0 w-[52px] text-right">
-        {formatTimestamp(entry.timestamp)}
-      </span>
-
-      {/* Pipeline tag */}
-      <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] uppercase shrink-0">
-        {entry.pipelineName}
-      </span>
-
-      {/* Change type tag */}
-      <span
-        className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
-        style={{
-          borderColor: `${config.color}44`,
-          backgroundColor: `${config.color}15`,
-          color: config.color,
-        }}
-      >
-        {config.label}
-      </span>
-
-      {/* Regression indicator */}
-      {entry.isRegression && (
-        <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-red-dim)] text-[var(--accent-red)] font-bold shrink-0">
-          ⚠ REGR
+      {/* Line 1 (mobile: time + deal name) / Desktop: inline */}
+      <div className="flex items-center gap-2 sm:contents">
+        {/* Timestamp */}
+        <span className="text-[var(--text-muted)] shrink-0 w-[52px] text-right">
+          {formatTimestamp(entry.timestamp)}
         </span>
-      )}
 
-      {/* Close date slip indicator */}
-      {isDateSlip && (
-        <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-orange-dim)] text-[var(--accent-orange)] font-bold shrink-0">
-          SLIP
+        {/* Deal name (mobile: shows on line 1) */}
+        <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors sm:hidden">
+          {entry.dealName}
         </span>
-      )}
+      </div>
 
-      {/* Deal name */}
-      <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors">
-        {entry.dealName}
-      </span>
-
-      {/* Owner name */}
-      {entry.ownerName && entry.ownerName !== "Unassigned" && !isOwnerChange && (
-        <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden xl:inline">
-          {entry.ownerName}
+      {/* Line 2 (mobile: tags + change) / Desktop: inline */}
+      <div className="flex items-center gap-1.5 sm:contents pl-[60px] sm:pl-0">
+        {/* Pipeline tag */}
+        <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] uppercase shrink-0">
+          {entry.pipelineName}
         </span>
-      )}
 
-      {/* Change values */}
-      <span className="flex items-center gap-1.5 shrink-0 ml-auto">
+        {/* Change type tag */}
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
+          style={{
+            borderColor: `${config.color}44`,
+            backgroundColor: `${config.color}15`,
+            color: config.color,
+          }}
+        >
+          {config.label}
+        </span>
+
+        {/* Regression indicator */}
+        {entry.isRegression && (
+          <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-red-dim)] text-[var(--accent-red)] font-bold shrink-0">
+            ⚠ REGR
+          </span>
+        )}
+
+        {/* Close date slip indicator */}
+        {isDateSlip && (
+          <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-orange-dim)] text-[var(--accent-orange)] font-bold shrink-0">
+            SLIP
+          </span>
+        )}
+
+        {/* Deal name (desktop only — on mobile it's on line 1) */}
+        <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors hidden sm:inline">
+          {entry.dealName}
+        </span>
+
+        {/* Owner name */}
+        {entry.ownerName && entry.ownerName !== "Unassigned" && !isOwnerChange && (
+          <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden xl:inline">
+            {entry.ownerName}
+          </span>
+        )}
+
+        {/* Change values */}
+        <span className="flex items-center gap-1.5 shrink-0 sm:ml-auto">
         {isStageChange && (
           <>
             <span className="text-[var(--text-muted)]">{entry.oldLabel.replace(/^\d+\s*-\s*/, "")}</span>
@@ -255,6 +265,7 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
           </>
         )}
       </span>
+      </div>
     </a>
   );
 }

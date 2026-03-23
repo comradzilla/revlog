@@ -12,6 +12,25 @@ interface Update {
 
 const UPDATES: Update[] = [
   {
+    version: "2.2",
+    date: "2026-03-23",
+    title: "Authentication + Mobile Log Mode",
+    description:
+      "Secures the dashboard with password auth and makes it fully usable on mobile with a changelog-first layout.",
+    changes: [
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Password login page with terminal aesthetic — supports all 3 themes" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "httpOnly session cookie with HMAC-SHA256 signing (7-day expiry, constant-time comparison)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Middleware route protection — redirects to /login, 401 for API routes" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Logout button in header bar" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Mobile: compact stats bar — pipeline value, changes today, won, lost in one line" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Mobile: slide-up filter drawer with all filters (quarter, deal type, pipeline, change type)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Mobile: tabbed sidebar — Funnels / Stale / Recent tabs below changelog" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Mobile: two-line changelog rows (time + deal on line 1, tags + change on line 2)" },
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Fixed CRON_SECRET bypass bug — undefined secret no longer skips auth in production" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "Web Crypto API for auth (Edge runtime compatible) — no Node.js crypto dependency" },
+    ],
+  },
+  {
     version: "2.1",
     date: "2026-03-23",
     title: "Smart Sync Architecture",

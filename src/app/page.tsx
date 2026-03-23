@@ -9,6 +9,9 @@ import { ChangelogFeed } from "@/components/ChangelogFeed";
 import { RecentDeals } from "@/components/RecentDeals";
 import { NetMovementBar } from "@/components/NetMovementBar";
 import { StaleDealsList } from "@/components/StaleDealsList";
+import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
+import { MobileStatsSummary } from "@/components/MobileStatsSummary";
+import { MobileSidebarTabs } from "@/components/MobileSidebarTabs";
 
 interface ChangelogEntry {
   dealId: string;
@@ -144,6 +147,7 @@ export default function Dashboard() {
   const [pipelineFilter, setPipelineFilter] = useState("all");
   const [dealTypeFilter, setDealTypeFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
 
   const activeRequest = useRef(0);
 
@@ -344,9 +348,29 @@ export default function Dashboard() {
         syncMeta={syncMeta}
       />
 
-      <main className="flex-1 max-w-[1600px] mx-auto w-full px-6 py-6 space-y-6">
-        {/* Filters bar */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <main className="flex-1 max-w-[1600px] mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Mobile: compact stats + filter trigger */}
+        <MobileStatsSummary stats={stats} />
+        <div className="sm:hidden flex items-center justify-between">
+          <span className="font-mono text-[10px] text-[var(--text-muted)]">
+            {quarterLabel} · {pipelineFilter === "all" ? "All Pipelines" : pipelines.find(p => p.pipeline === pipelineFilter)?.pipeline_name || pipelineFilter}
+            {dealTypeFilter !== "all" ? ` · ${dealTypeFilter}` : ""}
+          </span>
+          <button
+            onClick={() => setFilterDrawerOpen(true)}
+            className="font-mono text-[11px] px-3 py-1.5 rounded border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)] transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="8" y1="12" x2="20" y2="12" />
+              <line x1="12" y1="18" x2="20" y2="18" />
+            </svg>
+            filters
+          </button>
+        </div>
+
+        {/* Desktop: Filters bar */}
+        <div className="hidden sm:flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4 flex-wrap">
             {/* Quarter multi-select */}
             <div className="flex items-center gap-1">
@@ -439,11 +463,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats row */}
-        <StatsCards stats={stats} />
+        {/* Stats row (hidden on mobile — MobileStatsSummary shown above) */}
+        <div className="hidden sm:block">
+          <StatsCards stats={stats} />
+        </div>
 
-        {/* Net movement bar */}
-        <NetMovementBar movement={netMovement} amountMovement={amountMovement} />
+        {/* Net movement bar (hidden on mobile) */}
+        <div className="hidden sm:block">
+          <NetMovementBar movement={netMovement} amountMovement={amountMovement} />
+        </div>
 
         {/* Main content grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -465,8 +493,8 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Filter tabs */}
-                <div className="flex items-center gap-1">
+                {/* Filter tabs (desktop only — on mobile, filters are in the drawer) */}
+                <div className="hidden sm:flex items-center gap-1">
                   {FILTER_TABS.map((f) => (
                     <button
                       key={f.key}
@@ -501,8 +529,37 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-5 xl:col-span-4 space-y-6">
+          {/* Mobile sidebar tabs (below changelog on small screens) */}
+          <div className="lg:hidden">
+            <MobileSidebarTabs
+              tabs={[
+                {
+                  key: "funnels",
+                  label: "Funnels",
+                  content: (
+                    <div className="space-y-4">
+                      <PipelineFunnel stages={growthStages} title="Growth Pipeline" totalCount={growthTotals.totalCount} totalValue={growthTotals.totalValue} />
+                      {renewalStages.length > 0 && <PipelineFunnel stages={renewalStages} title="Renewal Pipeline" totalCount={renewalTotals.totalCount} totalValue={renewalTotals.totalValue} />}
+                      {upsellStages.length > 0 && <PipelineFunnel stages={upsellStages} title="Upsell" totalCount={upsellTotals.totalCount} totalValue={upsellTotals.totalValue} accentColor="var(--accent-orange)" filterOptions={[{ key: "all", label: "ALL" }, ...upsellPipelines.map(p => ({ key: p.pipeline, label: p.pipeline_name }))]} activeFilter={upsellPipelineFilter} onFilterChange={setUpsellPipelineFilter} />}
+                    </div>
+                  ),
+                },
+                {
+                  key: "stale",
+                  label: "Stale",
+                  content: <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} />,
+                },
+                {
+                  key: "recent",
+                  label: "Recent",
+                  content: <RecentDeals deals={recentDeals} />,
+                },
+              ]}
+            />
+          </div>
+
+          {/* Desktop sidebar */}
+          <div className="hidden lg:block lg:col-span-5 xl:col-span-4 space-y-6">
             <PipelineFunnel
               stages={growthStages}
               title="Growth Pipeline"
@@ -549,13 +606,29 @@ export default function Dashboard() {
                 updates &amp; dev notes
               </Link>
             </span>
-            <span className="font-mono text-[10px] text-[var(--text-muted)]">
+            <span className="font-mono text-[10px] text-[var(--text-muted)] hidden sm:inline">
               auto-refresh: 2min &middot; hub:{" "}
               <span className="text-[var(--accent-blue)]">3282655</span>
             </span>
           </div>
         </footer>
       </main>
+
+      {/* Mobile filter drawer (rendered outside main for fixed positioning) */}
+      <MobileFilterDrawer
+        isOpen={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        quarterOptions={getQuarterOptions()}
+        selectedQuarters={selectedQuarters}
+        onToggleQuarter={toggleQuarter}
+        dealTypeFilter={dealTypeFilter}
+        onDealTypeChange={setDealTypeFilter}
+        pipelines={pipelines}
+        pipelineFilter={pipelineFilter}
+        onPipelineChange={setPipelineFilter}
+        filter={filter}
+        onFilterChange={setFilter}
+      />
     </div>
   );
 }
