@@ -11,6 +11,7 @@ interface Deal {
   ownerName: string;
   changeType?: string;
   dealType?: string;
+  stageEnteredAt?: string;
 }
 
 function getStageClass(stageName: string): string {
@@ -52,6 +53,19 @@ function timeAgo(ts: string): string {
   return `${Math.floor(diff / 86400000)}d`;
 }
 
+function daysInStage(stageEnteredAt: string | undefined): number | null {
+  if (!stageEnteredAt) return null;
+  const entered = new Date(stageEnteredAt).getTime();
+  if (isNaN(entered)) return null;
+  return Math.floor((Date.now() - entered) / 86400000);
+}
+
+function getDaysColor(days: number): string {
+  if (days < 14) return "var(--accent-green)";
+  if (days < 30) return "var(--accent-orange)";
+  return "var(--accent-red)";
+}
+
 export function RecentDeals({ deals }: { deals: Deal[] }) {
   return (
     <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
@@ -66,6 +80,7 @@ export function RecentDeals({ deals }: { deals: Deal[] }) {
         {deals.slice(0, 15).map((deal) => {
           const typeLabel = getDealTypeLabel(deal.dealType);
           const typeColor = getDealTypeColor(deal.dealType);
+          const days = daysInStage(deal.stageEnteredAt);
           return (
             <a
               key={deal.id}
@@ -83,15 +98,19 @@ export function RecentDeals({ deals }: { deals: Deal[] }) {
                   className={`font-mono text-[10px] px-1 py-0.5 rounded border shrink-0 ${
                     deal.changeType === "dealstage"
                       ? "border-[var(--accent-purple)] text-[var(--accent-purple)]"
+                      : deal.changeType === "created"
+                      ? "border-[var(--accent-green)] text-[var(--accent-green)]"
                       : "border-[var(--accent-cyan)] text-[var(--accent-cyan)]"
                   }`}
                   style={{
                     backgroundColor: deal.changeType === "dealstage"
                       ? "rgba(139, 92, 246, 0.15)"
+                      : deal.changeType === "created"
+                      ? "rgba(16, 185, 129, 0.15)"
                       : "rgba(6, 182, 212, 0.15)",
                   }}
                 >
-                  {deal.changeType === "dealstage" ? "STG" : "AMT"}
+                  {deal.changeType === "dealstage" ? "STG" : deal.changeType === "created" ? "NEW" : "AMT"}
                 </span>
               )}
 
@@ -113,6 +132,16 @@ export function RecentDeals({ deals }: { deals: Deal[] }) {
               >
                 {deal.currentStageName.replace(/^\d+\s*-\s*/, "")}
               </span>
+
+              {/* Time in stage badge */}
+              {days !== null && days >= 0 && (
+                <span
+                  className="font-mono text-[9px] shrink-0"
+                  style={{ color: getDaysColor(days) }}
+                >
+                  {days}d
+                </span>
+              )}
 
               <span className="font-mono text-xs text-[var(--text-primary)] truncate flex-1 group-hover:text-white transition-colors">
                 {deal.dealName}

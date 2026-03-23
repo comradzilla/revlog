@@ -2,9 +2,17 @@ import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Normalize deal type values from HubSpot
 const UPSELL_TYPES = ["existingbusiness", "existing_business"];
 const NEW_BIZ_TYPES = ["newbusiness", "new_business"];
+
+// Stage weights for weighted pipeline (mirrors hubspot.ts)
+const STAGE_WEIGHT_MAP: Record<string, number> = {
+  "1166852615": 0.10, "1166852616": 0.25, "1166852617": 0.50,
+  "1166852618": 0.70, "1166852619": 0.90,
+  "1312827533": 0.10, "1312827535": 0.25, "1312827528": 0.50,
+  "1312827529": 0.70, "1312827530": 0.90,
+  "224212800": 0.10, "224212801": 0.25, "224212802": 0.50, "227590167": 0.70,
+};
 
 function parseQuarters(q: string | null): { start: Date; end: Date }[] {
   if (!q) return [];
@@ -38,7 +46,6 @@ function quarterCondition(
   return `(${parts.join(" OR ")})`;
 }
 
-// Build deal type SQL condition
 function dealTypeCondition(
   dtFilter: string | null,
   column: string,
@@ -57,6 +64,18 @@ function dealTypeCondition(
   return `${column} = $${params.length}`;
 }
 
+// Detect stage regression from label prefixes (e.g., "05 - Negotiation" → "02 - Qualification")
+function isStageRegression(oldLabel: string, newLabel: string): boolean {
+  const oldMatch = oldLabel.match(/^(\d+)/);
+  const newMatch = newLabel.match(/^(\d+)/);
+  if (!oldMatch || !newMatch) return false;
+  const oldNum = parseInt(oldMatch[1]);
+  const newNum = parseInt(newMatch[1]);
+  // Stage 0 = Closed Lost, don't count as regression
+  if (newNum === 0) return false;
+  return newNum < oldNum;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") || "changelog";
@@ -70,28 +89,22 @@ export async function GET(request: Request) {
         const limit = parseInt(searchParams.get("limit") || "200");
         const params: (string | number | Date | string[])[] = [];
         const conditions: string[] = [];
-        // If filtering by deal type, need to join deals table
-        const needsDealJoin = dealTypeFilter && dealTypeFilter !== "all";
 
-        let sql = needsDealJoin
-          ? `SELECT cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name, cl.property,
+        // Always join deals + owners for owner name and deal type filtering
+        let sql = `SELECT cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name, cl.property,
                     cl.property_label, cl.old_value, cl.new_value, cl.old_label, cl.new_label,
-                    cl.changed_at as timestamp, cl.source_type
+                    cl.changed_at as timestamp, cl.source_type,
+                    COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name
              FROM deal_changelog cl
-             JOIN deals d ON d.id = cl.deal_id`
-          : `SELECT deal_id, deal_name, pipeline, pipeline_name, property,
-                    property_label, old_value, new_value, old_label, new_label,
-                    changed_at as timestamp, source_type
-             FROM deal_changelog`;
+             LEFT JOIN deals d ON d.id = cl.deal_id
+             LEFT JOIN owners o ON o.id = d.owner_id`;
 
-        const colPrefix = needsDealJoin ? "cl." : "";
-
-        const qc = quarterCondition(quarters, `${colPrefix}changed_at`, params);
+        const qc = quarterCondition(quarters, "cl.changed_at", params);
         if (qc) conditions.push(qc);
 
         if (pipelineFilter && pipelineFilter !== "all") {
           params.push(pipelineFilter);
-          conditions.push(`${colPrefix}pipeline = $${params.length}`);
+          conditions.push(`cl.pipeline = $${params.length}`);
         }
 
         const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", params);
@@ -101,24 +114,29 @@ export async function GET(request: Request) {
           sql += ` WHERE ${conditions.join(" AND ")}`;
         }
 
-        sql += ` ORDER BY ${colPrefix}changed_at DESC LIMIT $${params.length + 1}`;
+        sql += ` ORDER BY cl.changed_at DESC LIMIT $${params.length + 1}`;
         params.push(limit);
 
         const result = await query(sql, params);
-        const changelogs = result.rows.map((r: Record<string, string>) => ({
-          dealId: r.deal_id,
-          dealName: r.deal_name,
-          pipeline: r.pipeline,
-          pipelineName: r.pipeline_name,
-          property: r.property,
-          propertyLabel: r.property_label,
-          oldValue: r.old_value,
-          newValue: r.new_value,
-          oldLabel: r.old_label,
-          newLabel: r.new_label,
-          timestamp: r.timestamp,
-          sourceType: r.source_type,
-        }));
+        const changelogs = result.rows.map((r: Record<string, string>) => {
+          const isStage = r.property === "dealstage";
+          return {
+            dealId: r.deal_id,
+            dealName: r.deal_name,
+            pipeline: r.pipeline,
+            pipelineName: r.pipeline_name,
+            property: r.property,
+            propertyLabel: r.property_label,
+            oldValue: r.old_value,
+            newValue: r.new_value,
+            oldLabel: r.old_label,
+            newLabel: r.new_label,
+            timestamp: r.timestamp,
+            sourceType: r.source_type,
+            ownerName: r.owner_name,
+            isRegression: isStage ? isStageRegression(r.old_label || "", r.new_label || "") : false,
+          };
+        });
         return Response.json({ changelogs });
       }
 
@@ -145,7 +163,7 @@ export async function GET(request: Request) {
             SELECT DISTINCT ON (d.id)
               d.id, d.deal_name, d.pipeline_name, d.stage_name as current_stage_name,
               d.amount, cl.changed_at as last_modified, cl.property as change_type,
-              d.deal_type,
+              d.deal_type, d.stage_entered_at,
               COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name
             FROM deals d
             INNER JOIN deal_changelog cl ON cl.deal_id = d.id
@@ -169,6 +187,7 @@ export async function GET(request: Request) {
           ownerName: r.owner_name,
           changeType: r.change_type,
           dealType: r.deal_type,
+          stageEnteredAt: r.stage_entered_at,
         }));
         return Response.json({ deals });
       }
@@ -197,7 +216,6 @@ export async function GET(request: Request) {
       }
 
       case "dealtype-stats": {
-        // Upsell breakdown by stage, optionally filtered by pipeline
         const dtParam = searchParams.get("dealType") || "upsell";
         const types = dtParam === "upsell" ? UPSELL_TYPES : NEW_BIZ_TYPES;
         const dtPipeline = searchParams.get("dtPipeline");
@@ -223,7 +241,6 @@ export async function GET(request: Request) {
           dtParams
         );
 
-        // Also get the pipelines that have upsell deals for the toggle
         const pipelinesResult = await query(
           `SELECT DISTINCT pipeline, pipeline_name, COUNT(*)::integer as count
            FROM deals WHERE deal_type = ANY($1)
@@ -259,6 +276,31 @@ export async function GET(request: Request) {
         return Response.json({
           totalValue: parseFloat(row.total_value),
           count: row.count,
+        });
+      }
+
+      case "weighted-pipeline": {
+        const weightCases = Object.entries(STAGE_WEIGHT_MAP)
+          .map(([stageId, weight]) => `WHEN deal_stage = '${stageId}' THEN ${weight}`)
+          .join("\n          ");
+
+        const result = await query(
+          `SELECT
+             COALESCE(SUM(amount), 0)::numeric as raw_value,
+             COALESCE(SUM(amount * CASE
+               ${weightCases}
+               ELSE 0.0
+             END), 0)::numeric as weighted_value
+           FROM deals
+           WHERE stage_name NOT ILIKE '%closed%'
+             AND stage_name NOT ILIKE '%renewed%'
+             AND stage_name NOT ILIKE '%churn%'
+             AND pipeline IS NOT NULL`
+        );
+        const row = result.rows[0];
+        return Response.json({
+          rawValue: parseFloat(row.raw_value),
+          weightedValue: parseFloat(row.weighted_value),
         });
       }
 
@@ -301,6 +343,153 @@ export async function GET(request: Request) {
           totalValue: parseFloat(row.total_value),
           count: row.count,
         });
+      }
+
+      case "closed-lost": {
+        const params: (string | number | Date | string[])[] = [];
+        let dateCondition: string;
+
+        if (quarters.length > 0) {
+          dateCondition = quarterCondition(quarters, "cl.changed_at", params);
+        } else {
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          params.push(monthStart.toISOString());
+          dateCondition = `cl.changed_at >= $${params.length}`;
+        }
+
+        const result = await query(
+          `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
+                  COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
+           FROM deal_changelog cl
+           JOIN deals d ON d.id = cl.deal_id
+           WHERE cl.property = 'dealstage'
+             AND (cl.new_label ILIKE '%closed lost%' OR cl.new_label ILIKE '%churn%')
+             AND ${dateCondition}`,
+          params
+        );
+        const row = result.rows[0];
+        return Response.json({
+          totalValue: parseFloat(row.total_value),
+          count: row.count,
+        });
+      }
+
+      case "net-movement": {
+        const params: (string | number | Date | string[])[] = [];
+        let dateCondition: string;
+
+        if (quarters.length > 0) {
+          dateCondition = quarterCondition(quarters, "created_at", params);
+        } else {
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          params.push(monthStart.toISOString());
+          dateCondition = `created_at >= $${params.length}`;
+        }
+
+        // Pipeline created (new deals entering)
+        const createdResult = await query(
+          `SELECT COUNT(*)::integer as count, COALESCE(SUM(amount), 0)::numeric as total_value
+           FROM deals WHERE ${dateCondition} AND pipeline IS NOT NULL`,
+          params
+        );
+
+        // Won and Lost from existing closed-won/lost endpoints
+        const wonParams: (string | number | Date | string[])[] = [];
+        const wonDateCond = quarters.length > 0
+          ? quarterCondition(quarters, "cl.changed_at", wonParams)
+          : (() => { wonParams.push(params[0]); return `cl.changed_at >= $1`; })();
+
+        const wonResult = await query(
+          `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
+                  COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
+           FROM deal_changelog cl JOIN deals d ON d.id = cl.deal_id
+           WHERE cl.property = 'dealstage'
+             AND (cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%renewed%')
+             AND ${wonDateCond}`,
+          wonParams
+        );
+
+        const lostParams: (string | number | Date | string[])[] = [];
+        const lostDateCond = quarters.length > 0
+          ? quarterCondition(quarters, "cl.changed_at", lostParams)
+          : (() => { lostParams.push(params[0]); return `cl.changed_at >= $1`; })();
+
+        const lostResult = await query(
+          `SELECT COUNT(DISTINCT cl.deal_id)::integer as count,
+                  COALESCE(SUM(DISTINCT d.amount), 0)::numeric as total_value
+           FROM deal_changelog cl JOIN deals d ON d.id = cl.deal_id
+           WHERE cl.property = 'dealstage'
+             AND (cl.new_label ILIKE '%closed lost%' OR cl.new_label ILIKE '%churn%')
+             AND ${lostDateCond}`,
+          lostParams
+        );
+
+        const created = { count: createdResult.rows[0].count, value: parseFloat(createdResult.rows[0].total_value) };
+        const won = { count: wonResult.rows[0].count, value: parseFloat(wonResult.rows[0].total_value) };
+        const lost = { count: lostResult.rows[0].count, value: parseFloat(lostResult.rows[0].total_value) };
+        const net = created.value - won.value - lost.value;
+
+        return Response.json({ created, won, lost, net });
+      }
+
+      case "amount-movement": {
+        const params: (string | number | Date | string[])[] = [];
+        const conditions: string[] = ["property = 'amount'"];
+
+        const qc = quarterCondition(quarters, "changed_at", params);
+        if (qc) conditions.push(qc);
+
+        const result = await query(
+          `SELECT
+             COALESCE(SUM(CASE WHEN (NULLIF(new_value,'')::numeric - NULLIF(old_value,'')::numeric) > 0
+               THEN (NULLIF(new_value,'')::numeric - NULLIF(old_value,'')::numeric) ELSE 0 END), 0)::numeric as grew,
+             COALESCE(SUM(CASE WHEN (NULLIF(new_value,'')::numeric - NULLIF(old_value,'')::numeric) < 0
+               THEN ABS(NULLIF(new_value,'')::numeric - NULLIF(old_value,'')::numeric) ELSE 0 END), 0)::numeric as shrank
+           FROM deal_changelog
+           WHERE ${conditions.join(" AND ")}`,
+          params
+        );
+        const row = result.rows[0];
+        const grew = parseFloat(row.grew);
+        const shrank = parseFloat(row.shrank);
+        return Response.json({ grew, shrank, net: grew - shrank });
+      }
+
+      case "stale-deals": {
+        const result = await query(
+          `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
+                  COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
+                  MAX(cl.changed_at) as last_activity,
+                  EXTRACT(DAY FROM NOW() - MAX(cl.changed_at))::integer as days_stale
+           FROM deals d
+           LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property IN ('dealstage', 'amount')
+           LEFT JOIN owners o ON o.id = d.owner_id
+           WHERE (d.stage_name ILIKE '%proposal%' OR d.stage_name ILIKE '%negotiat%'
+                  OR d.stage_name ILIKE '%propose%' OR d.stage_name ILIKE '%negotiate%'
+                  OR d.stage_name ILIKE '%solutioning%' OR d.stage_name ILIKE '%qualification%')
+             AND d.stage_name NOT ILIKE '%closed%'
+           GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name, o.first_name, o.last_name
+           HAVING MAX(cl.changed_at) < NOW() - INTERVAL '30 days' OR MAX(cl.changed_at) IS NULL
+           ORDER BY d.amount DESC NULLS LAST
+           LIMIT 20`
+        );
+
+        const deals = result.rows.map((r: Record<string, string>) => ({
+          id: r.id,
+          dealName: r.deal_name,
+          amount: parseFloat(r.amount || "0"),
+          stageName: r.stage_name,
+          pipelineName: r.pipeline_name,
+          ownerName: r.owner_name,
+          lastActivity: r.last_activity,
+          daysStale: parseInt(r.days_stale) || 999,
+        }));
+
+        const totalValue = deals.reduce((s, d) => s + d.amount, 0);
+
+        return Response.json({ deals, count: deals.length, totalValue });
       }
 
       case "deal-types": {

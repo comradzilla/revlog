@@ -2,6 +2,7 @@ import { query } from "./db";
 import {
   getStageName,
   getPipelineName,
+  STAGE_WEIGHTS,
   type DealChange,
   type PropertyHistory,
 } from "./hubspot";
@@ -161,14 +162,31 @@ async function syncDeals() {
 }
 
 // ============================================
+// Build owner ID → name lookup from DB
+// ============================================
+async function getOwnerMap(): Promise<Record<string, string>> {
+  const result = await query(
+    "SELECT id, first_name, last_name FROM owners"
+  );
+  const map: Record<string, string> = {};
+  for (const row of result.rows) {
+    map[row.id] = `${row.first_name} ${row.last_name}`.trim() || "Unknown";
+  }
+  return map;
+}
+
+// ============================================
 // Sync property history → changelog
+// Now tracks: dealstage, amount, closedate, hubspot_owner_id
 // ============================================
 async function syncChangelog(dealIds: string[]) {
-  // Get the last synced changelog timestamp
   const lastSyncResult = await query(
     "SELECT value FROM sync_meta WHERE key = 'last_changelog_sync'"
   );
   const lastSync = lastSyncResult.rows[0]?.value || "1970-01-01T00:00:00Z";
+
+  // Build owner map for resolving owner ID changes
+  const ownerMap = await getOwnerMap();
 
   let newEntries = 0;
 
@@ -178,7 +196,7 @@ async function syncChangelog(dealIds: string[]) {
 
     const promises = batch.map(async (dealId) => {
       const res = await fetch(
-        `${HUBSPOT_API}/crm/v3/objects/deals/${dealId}?propertiesWithHistory=dealstage,amount&properties=dealname,pipeline`,
+        `${HUBSPOT_API}/crm/v3/objects/deals/${dealId}?propertiesWithHistory=dealstage,amount,closedate,hubspot_owner_id&properties=dealname,pipeline`,
         { headers: headers() }
       );
 
@@ -189,7 +207,7 @@ async function syncChangelog(dealIds: string[]) {
       const pipeline = data.properties?.pipeline || "";
       const pipelineName = getPipelineName(pipeline);
 
-      for (const prop of ["dealstage", "amount"]) {
+      for (const prop of ["dealstage", "amount", "closedate", "hubspot_owner_id"]) {
         const history: PropertyHistory[] =
           data.propertiesWithHistory?.[prop] || [];
 
@@ -200,16 +218,35 @@ async function syncChangelog(dealIds: string[]) {
           // Skip entries we've already synced
           if (entry.timestamp <= lastSync) continue;
 
-          const isStage = prop === "dealstage";
-          const oldLabel = isStage
-            ? getStageName(prev.value)
-            : `$${parseFloat(prev.value || "0").toLocaleString()}`;
-          const newLabel = isStage
-            ? getStageName(entry.value)
-            : `$${parseFloat(entry.value || "0").toLocaleString()}`;
-
           // Skip if values are the same
           if (prev.value === entry.value) continue;
+
+          let propertyLabel: string;
+          let oldLabel: string;
+          let newLabel: string;
+
+          if (prop === "dealstage") {
+            propertyLabel = "Deal Stage";
+            oldLabel = getStageName(prev.value);
+            newLabel = getStageName(entry.value);
+          } else if (prop === "amount") {
+            propertyLabel = "Deal Amount";
+            oldLabel = `$${parseFloat(prev.value || "0").toLocaleString()}`;
+            newLabel = `$${parseFloat(entry.value || "0").toLocaleString()}`;
+          } else if (prop === "closedate") {
+            propertyLabel = "Close Date";
+            oldLabel = prev.value
+              ? new Date(prev.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : "None";
+            newLabel = entry.value
+              ? new Date(entry.value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : "None";
+          } else {
+            // hubspot_owner_id
+            propertyLabel = "Deal Owner";
+            oldLabel = ownerMap[prev.value] || prev.value || "Unassigned";
+            newLabel = ownerMap[entry.value] || entry.value || "Unassigned";
+          }
 
           await query(
             `INSERT INTO deal_changelog (deal_id, deal_name, pipeline, pipeline_name, property, property_label, old_value, new_value, old_label, new_label, changed_at, source_type)
@@ -224,7 +261,7 @@ async function syncChangelog(dealIds: string[]) {
               pipeline,
               pipelineName,
               prop,
-              isStage ? "Deal Stage" : "Deal Amount",
+              propertyLabel,
               prev.value,
               entry.value,
               oldLabel,
@@ -253,11 +290,52 @@ async function syncChangelog(dealIds: string[]) {
 }
 
 // ============================================
-// Capture pipeline snapshot
+// Sync deal creation events
+// ============================================
+async function syncDealCreations() {
+  const lastSyncResult = await query(
+    "SELECT value FROM sync_meta WHERE key = 'last_creation_sync'"
+  );
+  const lastSync = lastSyncResult.rows[0]?.value || "1970-01-01T00:00:00Z";
+
+  const result = await query(
+    `INSERT INTO deal_changelog (deal_id, deal_name, pipeline, pipeline_name, property, property_label, old_value, new_value, old_label, new_label, changed_at, source_type)
+     SELECT d.id, d.deal_name, d.pipeline, d.pipeline_name,
+            'created', 'Deal Created', NULL, d.deal_stage, NULL,
+            d.stage_name || CASE WHEN d.amount > 0 THEN ' — $' || TRIM(TO_CHAR(d.amount, '999,999,999')) ELSE '' END,
+            d.created_at, 'CREATION'
+     FROM deals d
+     WHERE d.created_at IS NOT NULL
+       AND d.created_at > $1
+       AND NOT EXISTS (
+         SELECT 1 FROM deal_changelog
+         WHERE deal_id = d.id AND property = 'created'
+       )
+     RETURNING deal_id`,
+    [lastSync]
+  );
+
+  await query(
+    `INSERT INTO sync_meta (key, value, updated_at)
+     VALUES ('last_creation_sync', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [new Date().toISOString()]
+  );
+
+  return result.rowCount || 0;
+}
+
+// ============================================
+// Capture pipeline snapshot (with weighted values)
 // ============================================
 async function capturePipelineSnapshot() {
+  // Build CASE statement for weighted values
+  const weightCases = Object.entries(STAGE_WEIGHTS)
+    .map(([stageId, weight]) => `WHEN deal_stage = '${stageId}' THEN ${weight}`)
+    .join("\n          ");
+
   await query(
-    `INSERT INTO pipeline_snapshots (snapshot_time, pipeline, pipeline_name, stage, stage_name, deal_count, total_value)
+    `INSERT INTO pipeline_snapshots (snapshot_time, pipeline, pipeline_name, stage, stage_name, deal_count, total_value, weighted_value)
      SELECT
        NOW(),
        pipeline,
@@ -265,7 +343,11 @@ async function capturePipelineSnapshot() {
        deal_stage,
        stage_name,
        COUNT(*)::integer,
-       COALESCE(SUM(amount), 0)
+       COALESCE(SUM(amount), 0),
+       COALESCE(SUM(amount * CASE
+          ${weightCases}
+          ELSE 0.0
+       END), 0)
      FROM deals
      WHERE pipeline IS NOT NULL AND deal_stage IS NOT NULL
      GROUP BY pipeline, pipeline_name, deal_stage, stage_name`
@@ -279,6 +361,7 @@ export async function runFullSync(): Promise<{
   owners: string;
   deals: number;
   changelog: number;
+  creations: number;
   snapshot: boolean;
 }> {
   console.log("[sync] Starting full HubSpot sync...");
@@ -292,21 +375,24 @@ export async function runFullSync(): Promise<{
   const dealCount = await syncDeals();
 
   // 3. Get recently modified deal IDs for changelog sync
-  // Only sync changelog for deals modified in last 30 days to avoid rate limits
   const recentDeals = await query(
     `SELECT id FROM deals WHERE updated_at > NOW() - INTERVAL '30 days' ORDER BY updated_at DESC LIMIT 50`
   );
   const dealIds = recentDeals.rows.map((r: { id: string }) => r.id);
 
-  // 4. Sync changelog
+  // 4. Sync changelog (stage, amount, closedate, owner changes)
   console.log(`[sync] Syncing changelog for ${dealIds.length} recent deals...`);
   const changelogCount = await syncChangelog(dealIds);
 
-  // 5. Capture pipeline snapshot
+  // 5. Sync deal creation events
+  console.log("[sync] Syncing deal creation events...");
+  const creationCount = await syncDealCreations();
+
+  // 6. Capture pipeline snapshot
   console.log("[sync] Capturing pipeline snapshot...");
   await capturePipelineSnapshot();
 
-  // 6. Update sync timestamp
+  // 7. Update sync timestamp
   await query(
     `INSERT INTO sync_meta (key, value, updated_at)
      VALUES ('last_full_sync', $1, NOW())
@@ -315,13 +401,14 @@ export async function runFullSync(): Promise<{
   );
 
   console.log(
-    `[sync] Complete. ${dealCount} deals, ${changelogCount} changelog entries.`
+    `[sync] Complete. ${dealCount} deals, ${changelogCount} changelog entries, ${creationCount} creation events.`
   );
 
   return {
     owners: "synced",
     deals: dealCount,
     changelog: changelogCount,
+    creations: creationCount,
     snapshot: true,
   };
 }

@@ -78,6 +78,33 @@ export function getStageNumber(stageId: string): number {
   return match ? parseInt(match[1]) : -1;
 }
 
+// Parse stage number from label string (e.g., "01 - Prospecting" → 1)
+export function getStageNumberFromLabel(label: string): number {
+  const match = label.match(/^(\d+)/);
+  return match ? parseInt(match[1]) : -1;
+}
+
+// Stage probability weights for weighted pipeline
+export const STAGE_WEIGHTS: Record<string, number> = {
+  // Growth Pipeline
+  "1166852615": 0.10, // Prospecting
+  "1166852616": 0.25, // Qualification
+  "1166852617": 0.50, // Solutioning
+  "1166852618": 0.70, // Proposal
+  "1166852619": 0.90, // Negotiation
+  // VS - Sales
+  "1312827533": 0.10,
+  "1312827535": 0.25,
+  "1312827528": 0.50,
+  "1312827529": 0.70,
+  "1312827530": 0.90,
+  // Partner Leads
+  "224212800": 0.10,
+  "224212801": 0.25,
+  "224212802": 0.50,
+  "227590167": 0.70,
+};
+
 export interface DealChange {
   id: string;
   dealName: string;

@@ -3,10 +3,13 @@
 interface Stats {
   totalOpenDeals: number;
   totalOpenValue: number;
+  weightedPipelineValue: number;
   todayChanges: number;
   weekChanges: number;
   closedWonThisMonth: number;
   closedWonValue: number;
+  closedLostThisMonth: number;
+  closedLostValue: number;
   quarterLabel?: string;
 }
 
@@ -27,11 +30,19 @@ export function StatsCards({ stats }: { stats: Stats }) {
     ? stats.quarterLabel.replace(/,/g, " + ").replace(/-/g, " ")
     : "MTD";
 
+  const winRate = (stats.closedWonThisMonth + stats.closedLostThisMonth) > 0
+    ? Math.round((stats.closedWonThisMonth / (stats.closedWonThisMonth + stats.closedLostThisMonth)) * 100)
+    : 0;
+
+  const avgDealSize = stats.closedWonThisMonth > 0
+    ? stats.closedWonValue / stats.closedWonThisMonth
+    : 0;
+
   const cards = [
     {
       label: "Open Pipeline (All)",
       value: formatDollars(stats.totalOpenValue),
-      sub: `${stats.totalOpenDeals} deals across all pipelines`,
+      sub: `${stats.totalOpenDeals} deals · wtd: ${formatDollars(stats.weightedPipelineValue)}`,
       color: "var(--accent-blue)",
       icon: "~",
     },
@@ -52,14 +63,21 @@ export function StatsCards({ stats }: { stats: Stats }) {
     {
       label: `Closed Won (${quarterDisplay})`,
       value: formatDollars(stats.closedWonValue),
-      sub: `${stats.closedWonThisMonth} deals`,
+      sub: `${stats.closedWonThisMonth} deals · avg: ${formatDollars(avgDealSize)}${winRate > 0 ? ` · ${winRate}% win` : ""}`,
       color: "var(--accent-green)",
       icon: "$",
+    },
+    {
+      label: `Closed Lost (${quarterDisplay})`,
+      value: formatDollars(stats.closedLostValue),
+      sub: `${stats.closedLostThisMonth} deals`,
+      color: "var(--accent-red)",
+      icon: "x",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
       {cards.map((card) => (
         <div
           key={card.label}

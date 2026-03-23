@@ -6,6 +6,8 @@ import { StatsCards } from "@/components/StatsCards";
 import { PipelineFunnel } from "@/components/PipelineFunnel";
 import { ChangelogFeed } from "@/components/ChangelogFeed";
 import { RecentDeals } from "@/components/RecentDeals";
+import { NetMovementBar } from "@/components/NetMovementBar";
+import { StaleDealsList } from "@/components/StaleDealsList";
 
 interface ChangelogEntry {
   dealId: string;
@@ -20,6 +22,8 @@ interface ChangelogEntry {
   newLabel: string;
   timestamp: string;
   sourceType: string;
+  ownerName?: string;
+  isRegression?: boolean;
 }
 
 interface DealEntry {
@@ -33,6 +37,7 @@ interface DealEntry {
   ownerName: string;
   changeType?: string;
   dealType?: string;
+  stageEnteredAt?: string;
 }
 
 interface StageData {
@@ -46,6 +51,30 @@ interface PipelineInfo {
   pipeline: string;
   pipeline_name: string;
   deal_count: number;
+}
+
+interface NetMovement {
+  created: { count: number; value: number };
+  won: { count: number; value: number };
+  lost: { count: number; value: number };
+  net: number;
+}
+
+interface AmountMovement {
+  grew: number;
+  shrank: number;
+  net: number;
+}
+
+interface StaleDeal {
+  id: string;
+  dealName: string;
+  amount: number;
+  stageName: string;
+  pipelineName: string;
+  ownerName: string;
+  lastActivity: string | null;
+  daysStale: number;
 }
 
 function getCurrentQuarter(): string {
@@ -77,6 +106,15 @@ const DEAL_TYPE_OPTIONS = [
   { key: "newbusiness", label: "NEW BIZ" },
 ];
 
+const FILTER_TABS = [
+  { key: "all", label: "all" },
+  { key: "stage", label: "stages" },
+  { key: "amount", label: "amounts" },
+  { key: "created", label: "created" },
+  { key: "closedate", label: "close date" },
+  { key: "owner", label: "owner" },
+];
+
 export default function Dashboard() {
   const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
   const [recentDeals, setRecentDeals] = useState<DealEntry[]>([]);
@@ -87,12 +125,15 @@ export default function Dashboard() {
   const [upsellStages, setUpsellStages] = useState<StageData[]>([]);
   const [upsellTotals, setUpsellTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [upsellPipelines, setUpsellPipelines] = useState<{ pipeline: string; pipeline_name: string; count: number }[]>([]);
-  const [upsellPipelineFilter, setUpsellPipelineFilter] = useState("4207989"); // default: Growth
-  const [pipelineValue, setPipelineValue] = useState({
-    totalValue: 0,
-    count: 0,
-  });
+  const [upsellPipelineFilter, setUpsellPipelineFilter] = useState("4207989");
+  const [pipelineValue, setPipelineValue] = useState({ totalValue: 0, count: 0 });
+  const [weightedPipeline, setWeightedPipeline] = useState(0);
   const [closedWon, setClosedWon] = useState({ totalValue: 0, count: 0 });
+  const [closedLost, setClosedLost] = useState({ totalValue: 0, count: 0 });
+  const [netMovement, setNetMovement] = useState<NetMovement | null>(null);
+  const [amountMovement, setAmountMovement] = useState<AmountMovement | null>(null);
+  const [staleDeals, setStaleDeals] = useState<StaleDeal[]>([]);
+  const [staleTotalValue, setStaleTotalValue] = useState(0);
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -125,14 +166,20 @@ export default function Dashboard() {
     const dtParam = dealTypeFilter !== "all" ? `&dealType=${dealTypeFilter}` : "";
 
     try {
-      const [recentRes, growthRes, renewalRes, upsellRes, valueRes, closedWonRes, pipelinesRes] =
+      const [recentRes, growthRes, renewalRes, upsellRes, valueRes, weightedRes,
+             closedWonRes, closedLostRes, netRes, amountRes, staleRes, pipelinesRes] =
         await Promise.all([
           fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}${dtParam}`),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
           fetch(`/api/hubspot?type=dealtype-stats&dealType=upsell&dtPipeline=${upsellPipelineFilter}`),
           fetch("/api/hubspot?type=pipeline-value"),
+          fetch("/api/hubspot?type=weighted-pipeline"),
           fetch(`/api/hubspot?type=closed-won${qParam}`),
+          fetch(`/api/hubspot?type=closed-lost${qParam}`),
+          fetch(`/api/hubspot?type=net-movement${qParam}`),
+          fetch(`/api/hubspot?type=amount-movement${qParam}`),
+          fetch("/api/hubspot?type=stale-deals"),
           fetch("/api/hubspot?type=pipeline-list"),
         ]);
 
@@ -172,9 +219,32 @@ export default function Dashboard() {
         const d = await valueRes.json();
         if (!isStale()) { setPipelineValue(d); anySuccess = true; }
       }
+      if (weightedRes.ok) {
+        const d = await weightedRes.json();
+        if (!isStale()) { setWeightedPipeline(d.weightedValue || 0); }
+      }
       if (closedWonRes.ok) {
         const d = await closedWonRes.json();
         if (!isStale()) { setClosedWon(d); anySuccess = true; }
+      }
+      if (closedLostRes.ok) {
+        const d = await closedLostRes.json();
+        if (!isStale()) { setClosedLost(d); }
+      }
+      if (netRes.ok) {
+        const d = await netRes.json();
+        if (!isStale()) { setNetMovement(d); }
+      }
+      if (amountRes.ok) {
+        const d = await amountRes.json();
+        if (!isStale()) { setAmountMovement(d); }
+      }
+      if (staleRes.ok) {
+        const d = await staleRes.json();
+        if (!isStale()) {
+          setStaleDeals(d.deals || []);
+          setStaleTotalValue(d.totalValue || 0);
+        }
       }
       if (pipelinesRes.ok) {
         const d = await pipelinesRes.json();
@@ -194,7 +264,7 @@ export default function Dashboard() {
         setIsLoading(false);
       }
 
-      // Fetch changelog separately
+      // Fetch changelog separately (can be larger)
       const changelogRes = await fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
@@ -236,10 +306,13 @@ export default function Dashboard() {
   const stats = {
     totalOpenDeals: pipelineValue.count,
     totalOpenValue: pipelineValue.totalValue,
+    weightedPipelineValue: weightedPipeline,
     todayChanges,
     weekChanges,
     closedWonThisMonth: closedWon.count,
     closedWonValue: closedWon.totalValue,
+    closedLostThisMonth: closedLost.count,
+    closedLostValue: closedLost.totalValue,
     quarterLabel,
   };
 
@@ -351,6 +424,9 @@ export default function Dashboard() {
         {/* Stats row */}
         <StatsCards stats={stats} />
 
+        {/* Net movement bar */}
+        <NetMovementBar movement={netMovement} amountMovement={amountMovement} />
+
         {/* Main content grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Changelog - main column */}
@@ -373,11 +449,7 @@ export default function Dashboard() {
 
                 {/* Filter tabs */}
                 <div className="flex items-center gap-1">
-                  {[
-                    { key: "all", label: "all" },
-                    { key: "stage", label: "stages" },
-                    { key: "amount", label: "amounts" },
-                  ].map((f) => (
+                  {FILTER_TABS.map((f) => (
                     <button
                       key={f.key}
                       onClick={() => setFilter(f.key)}
@@ -442,6 +514,10 @@ export default function Dashboard() {
                 onFilterChange={setUpsellPipelineFilter}
               />
             )}
+
+            {/* Stale deals warning */}
+            <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} />
+
             <RecentDeals deals={recentDeals} />
           </div>
         </div>
@@ -450,7 +526,7 @@ export default function Dashboard() {
         <footer className="border-t border-[var(--border-color)] pt-4 pb-8">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
-              CEO Dashboard v1.4 &middot; HubSpot Pipeline Changelog
+              CEO Dashboard v2.0 &middot; HubSpot Pipeline Intelligence
             </span>
             <span className="font-mono text-[10px] text-[var(--text-muted)]">
               auto-refresh: 2min &middot; hub:{" "}

@@ -15,9 +15,12 @@ interface ChangelogEntry {
   newLabel: string;
   timestamp: string;
   sourceType: string;
+  ownerName?: string;
+  isRegression?: boolean;
 }
 
 function getStageColor(label: string): string {
+  if (!label) return "var(--accent-cyan)";
   if (label.includes("Closed Won") || label.includes("Renewed")) return "var(--accent-green)";
   if (label.includes("Closed Lost") || label.includes("Churn")) return "var(--accent-red)";
   if (label.includes("Negotiation") || label.includes("Proposal")) return "var(--accent-orange)";
@@ -49,6 +52,15 @@ function formatDate(ts: string): string {
   });
 }
 
+// Property type tag config
+const PROPERTY_CONFIG: Record<string, { label: string; color: string }> = {
+  dealstage: { label: "STAGE", color: "var(--accent-orange)" },
+  amount: { label: "AMOUNT", color: "var(--accent-cyan)" },
+  created: { label: "CREATED", color: "var(--accent-green)" },
+  closedate: { label: "CLOSE DATE", color: "var(--accent-blue)" },
+  hubspot_owner_id: { label: "OWNER", color: "var(--accent-purple)" },
+};
+
 export function ChangelogFeed({
   entries,
   filter,
@@ -60,6 +72,9 @@ export function ChangelogFeed({
     if (filter === "all") return entries;
     if (filter === "stage") return entries.filter((e) => e.property === "dealstage");
     if (filter === "amount") return entries.filter((e) => e.property === "amount");
+    if (filter === "created") return entries.filter((e) => e.property === "created");
+    if (filter === "closedate") return entries.filter((e) => e.property === "closedate");
+    if (filter === "owner") return entries.filter((e) => e.property === "hubspot_owner_id");
     return entries;
   }, [entries, filter]);
 
@@ -87,7 +102,6 @@ export function ChangelogFeed({
     <div className="space-y-4">
       {Object.entries(grouped).map(([date, dateEntries]) => (
         <div key={date}>
-          {/* Date header */}
           <div className="flex items-center gap-3 mb-2">
             <span className="font-mono text-xs text-[var(--text-muted)] uppercase tracking-wider bg-[var(--bg-primary)] pr-3">
               {date}
@@ -112,21 +126,35 @@ export function ChangelogFeed({
 function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
   const isStageChange = entry.property === "dealstage";
   const isAmountChange = entry.property === "amount";
+  const isCreation = entry.property === "created";
+  const isCloseDate = entry.property === "closedate";
+  const isOwnerChange = entry.property === "hubspot_owner_id";
 
-  const newColor = isStageChange
-    ? getStageColor(entry.newLabel)
-    : "var(--accent-cyan)";
+  const config = PROPERTY_CONFIG[entry.property] || { label: entry.property.toUpperCase(), color: "var(--text-muted)" };
 
   const amountDelta = isAmountChange
     ? parseFloat(entry.newValue || "0") - parseFloat(entry.oldValue || "0")
     : 0;
+
+  // Detect close date slip (new date is later than old date)
+  const isDateSlip = isCloseDate && entry.oldValue && entry.newValue
+    ? new Date(entry.newValue).getTime() > new Date(entry.oldValue).getTime()
+    : false;
+
+  const rowBorderClass = entry.isRegression
+    ? "border-l-2 border-l-[var(--accent-red)]"
+    : isCreation
+    ? "border-l-2 border-l-[var(--accent-green)]"
+    : isDateSlip
+    ? "border-l-2 border-l-[var(--accent-orange)]"
+    : "";
 
   return (
     <a
       href={`https://app.hubspot.com/contacts/3282655/record/0-3/${entry.dealId}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="changelog-entry flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group"
+      className={`changelog-entry flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group ${rowBorderClass}`}
     >
       {/* Timestamp */}
       <span className="text-[var(--text-muted)] shrink-0 w-[52px] text-right">
@@ -142,26 +170,47 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
       <span
         className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
         style={{
-          borderColor: `${newColor}44`,
-          backgroundColor: `${newColor}15`,
-          color: newColor,
+          borderColor: `${config.color}44`,
+          backgroundColor: `${config.color}15`,
+          color: config.color,
         }}
       >
-        {isStageChange ? "STAGE" : "AMOUNT"}
+        {config.label}
       </span>
+
+      {/* Regression indicator */}
+      {entry.isRegression && (
+        <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-red-dim)] text-[var(--accent-red)] font-bold shrink-0">
+          ⚠ REGR
+        </span>
+      )}
+
+      {/* Close date slip indicator */}
+      {isDateSlip && (
+        <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--accent-orange-dim)] text-[var(--accent-orange)] font-bold shrink-0">
+          SLIP
+        </span>
+      )}
 
       {/* Deal name */}
       <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors">
         {entry.dealName}
       </span>
 
+      {/* Owner name */}
+      {entry.ownerName && entry.ownerName !== "Unassigned" && !isOwnerChange && (
+        <span className="text-[10px] text-[var(--text-muted)] shrink-0 hidden xl:inline">
+          {entry.ownerName}
+        </span>
+      )}
+
       {/* Change values */}
       <span className="flex items-center gap-1.5 shrink-0 ml-auto">
         {isStageChange && (
           <>
             <span className="text-[var(--text-muted)]">{entry.oldLabel.replace(/^\d+\s*-\s*/, "")}</span>
-            <span style={{ color: newColor }} className="font-bold">&rarr;</span>
-            <span style={{ color: newColor }} className="font-semibold">{entry.newLabel.replace(/^\d+\s*-\s*/, "")}</span>
+            <span style={{ color: getStageColor(entry.newLabel) }} className="font-bold">&rarr;</span>
+            <span style={{ color: getStageColor(entry.newLabel) }} className="font-semibold">{entry.newLabel.replace(/^\d+\s*-\s*/, "")}</span>
           </>
         )}
         {isAmountChange && (
@@ -182,6 +231,27 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
                 {amountDelta >= 0 ? "+" : ""}${Math.abs(amountDelta).toLocaleString()}
               </span>
             )}
+          </>
+        )}
+        {isCreation && (
+          <span className="text-[var(--accent-green)]">
+            {entry.newLabel}
+          </span>
+        )}
+        {isCloseDate && (
+          <>
+            <span className="text-[var(--text-muted)]">{entry.oldLabel}</span>
+            <span className={isDateSlip ? "text-[var(--accent-orange)]" : "text-[var(--accent-blue)]"} >&rarr;</span>
+            <span className={`font-semibold ${isDateSlip ? "text-[var(--accent-orange)]" : "text-[var(--accent-blue)]"}`}>
+              {entry.newLabel}
+            </span>
+          </>
+        )}
+        {isOwnerChange && (
+          <>
+            <span className="text-[var(--text-muted)]">{entry.oldLabel}</span>
+            <span className="text-[var(--accent-purple)]">&rarr;</span>
+            <span className="font-semibold text-[var(--accent-purple)]">{entry.newLabel}</span>
           </>
         )}
       </span>
