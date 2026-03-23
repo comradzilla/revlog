@@ -326,34 +326,36 @@ export async function runFullSync(): Promise<{
   console.log("[sync:full] Syncing owners...");
   await syncOwners();
 
-  // 2. Full deal scan (all pages)
+  // 2. Full deal scan (all pages) — uses LIST endpoint, not search
   console.log("[sync:full] Syncing all deals...");
   const allDeals: DealChange[] = [];
-  let offset = 0;
+  let after: string | undefined = undefined;
 
   while (true) {
-    const body = {
-      sorts: [{ propertyName: "hs_lastmodifieddate", direction: "DESCENDING" }],
-      properties: DEAL_PROPERTIES,
-      limit: 100,
-      after: offset > 0 ? offset : undefined,
-    };
+    const params = new URLSearchParams({
+      limit: "100",
+      properties: DEAL_PROPERTIES.join(","),
+    });
+    if (after) params.set("after", after);
 
-    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/deals/search`, {
-      method: "POST",
+    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/deals?${params}`, {
       headers: headers(),
-      body: JSON.stringify(body),
     });
 
-    if (!res.ok) break;
+    if (!res.ok) {
+      console.error(`[sync:full] List deals failed: ${res.status}`);
+      break;
+    }
     const data = await res.json();
 
     for (const deal of data.results) {
       allDeals.push(parseDeal(deal));
     }
 
+    console.log(`[sync:full] Fetched ${allDeals.length} deals so far...`);
+
     if (!data.paging?.next?.after) break;
-    offset = parseInt(data.paging.next.after);
+    after = data.paging.next.after;
   }
 
   for (const deal of allDeals) {

@@ -48,7 +48,7 @@ echo "[6/9] Cloning repository..."
 if [ ! -d "$APP_DIR" ]; then
     git clone "$REPO" "$APP_DIR"
 fi
-cd "$APP_DIR/ceo-dashboard"
+cd "$APP_DIR"
 
 if [ ! -f .env ]; then
     cp .env.example .env
@@ -87,12 +87,12 @@ echo " Setup complete!"
 echo "========================================="
 echo ""
 echo "Next steps:"
-echo "  1. Edit the env file:        nano $APP_DIR/ceo-dashboard/.env"
+echo "  1. Edit the env file:        nano $APP_DIR/.env"
 echo "  2. Update the Nginx domain:  nano /etc/nginx/sites-available/ceo-dashboard"
 echo "     Replace 'dashboard.yourdomain.com' with your actual domain."
 echo "  3. Point your DNS A record to this server's IP."
 echo "  4. Set up SSL with Certbot:"
 echo "       certbot --nginx -d dashboard.yourdomain.com"
 echo "  5. Restart the app after env changes:"
-echo "       cd $APP_DIR/ceo-dashboard && pm2 restart ceo-dashboard"
+echo "       cd $APP_DIR && pm2 restart ceo-dashboard"
 echo ""
