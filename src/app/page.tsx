@@ -145,7 +145,7 @@ export default function Dashboard() {
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const [filter, setFilter] = useState("all");
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
-  const [pipelineFilter, setPipelineFilter] = useState("all");
+  const [pipelineFilter, setPipelineFilter] = useState<string[]>([]);
   const [dealTypeFilter, setDealTypeFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
@@ -165,6 +165,15 @@ export default function Dashboard() {
     });
   };
 
+  const togglePipeline = (pipeline: string) => {
+    setPipelineFilter(prev => {
+      if (prev.includes(pipeline)) {
+        return prev.filter(p => p !== pipeline);
+      }
+      return [...prev, pipeline];
+    });
+  };
+
   const fetchData = useCallback(async () => {
     const requestId = ++activeRequest.current;
     setIsLoading(true);
@@ -172,7 +181,7 @@ export default function Dashboard() {
 
     const isStale = () => requestId !== activeRequest.current;
     const qParam = selectedQuarters.length > 0 ? `&quarter=${selectedQuarters.join(",")}` : "";
-    const pParam = pipelineFilter !== "all" ? `&pipeline=${pipelineFilter}` : "";
+    const pParam = pipelineFilter.length > 0 ? `&pipeline=${pipelineFilter.join(",")}` : "";
     const dtParam = dealTypeFilter !== "all" ? `&dealType=${dealTypeFilter}` : "";
 
     try {
@@ -362,7 +371,7 @@ export default function Dashboard() {
         <MobileStatsSummary stats={stats} />
         <div className="sm:hidden flex items-center justify-between">
           <span className="font-mono text-[10px] text-[var(--text-muted)]">
-            {quarterLabel} · {pipelineFilter === "all" ? "All Pipelines" : pipelines.find(p => p.pipeline === pipelineFilter)?.pipeline_name || pipelineFilter}
+            {quarterLabel} · {pipelineFilter.length === 0 ? "All Pipelines" : pipelineFilter.map(id => pipelines.find(p => p.pipeline === id)?.pipeline_name || id).join(", ")}
             {dealTypeFilter !== "all" ? ` · ${dealTypeFilter}` : ""}
           </span>
           <button
@@ -422,9 +431,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setPipelineFilter("all")}
+                onClick={() => setPipelineFilter([])}
                 className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
-                  pipelineFilter === "all"
+                  pipelineFilter.length === 0
                     ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
                     : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                 }`}
@@ -434,9 +443,9 @@ export default function Dashboard() {
               {pipelines.slice(0, 5).map((p) => (
                 <button
                   key={p.pipeline}
-                  onClick={() => setPipelineFilter(p.pipeline)}
+                  onClick={() => togglePipeline(p.pipeline)}
                   className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
-                    pipelineFilter === p.pipeline
+                    pipelineFilter.includes(p.pipeline)
                       ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
                       : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                   }`}
@@ -695,7 +704,8 @@ export default function Dashboard() {
         onDealTypeChange={setDealTypeFilter}
         pipelines={pipelines}
         pipelineFilter={pipelineFilter}
-        onPipelineChange={setPipelineFilter}
+        onPipelineToggle={togglePipeline}
+        onPipelineClear={() => setPipelineFilter([])}
         filter={filter}
         onFilterChange={setFilter}
         changelogView={changelogView}

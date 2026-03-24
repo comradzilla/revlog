@@ -64,6 +64,22 @@ function dealTypeCondition(
   return `${column} = $${params.length}`;
 }
 
+function pipelineCondition(
+  pFilter: string | null,
+  column: string,
+  params: (string | number | Date | string[])[]
+): string {
+  if (!pFilter || pFilter === "all") return "";
+  const ids = pFilter.split(",").map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0) return "";
+  if (ids.length === 1) {
+    params.push(ids[0]);
+    return `${column} = $${params.length}`;
+  }
+  params.push(ids);
+  return `${column} = ANY($${params.length})`;
+}
+
 // Detect stage regression from label prefixes (e.g., "05 - Negotiation" → "02 - Qualification")
 function isStageRegression(oldLabel: string, newLabel: string): boolean {
   const oldMatch = oldLabel.match(/^(\d+)/);
@@ -102,10 +118,8 @@ export async function GET(request: Request) {
         const qc = quarterCondition(quarters, "cl.changed_at", params);
         if (qc) conditions.push(qc);
 
-        if (pipelineFilter && pipelineFilter !== "all") {
-          params.push(pipelineFilter);
-          conditions.push(`cl.pipeline = $${params.length}`);
-        }
+        const pc = pipelineCondition(pipelineFilter, "cl.pipeline", params);
+        if (pc) conditions.push(pc);
 
         const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", params);
         if (dtc) conditions.push(dtc);
@@ -148,10 +162,8 @@ export async function GET(request: Request) {
         const qc = quarterCondition(quarters, "cl.changed_at", params);
         if (qc) conditions.push(qc);
 
-        if (pipelineFilter && pipelineFilter !== "all") {
-          params.push(pipelineFilter);
-          conditions.push(`cl.pipeline = $${params.length}`);
-        }
+        const pc = pipelineCondition(pipelineFilter, "cl.pipeline", params);
+        if (pc) conditions.push(pc);
 
         const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", params);
         if (dtc) conditions.push(dtc);
@@ -541,14 +553,24 @@ export async function GET(request: Request) {
       }
 
       case "pipeline-ledger": {
-        // 1. Get current open pipeline total
+        // 1. Get current open pipeline total (respects pipeline + dealType filters)
+        const balParams: (string | number | Date | string[])[] = [];
+        const balConditions: string[] = [
+          "stage_name NOT ILIKE '%closed%'",
+          "stage_name NOT ILIKE '%renewed%'",
+          "stage_name NOT ILIKE '%churn%'",
+          "pipeline IS NOT NULL",
+        ];
+        const bpc = pipelineCondition(pipelineFilter, "pipeline", balParams);
+        if (bpc) balConditions.push(bpc);
+        const bdtc = dealTypeCondition(dealTypeFilter, "deal_type", balParams);
+        if (bdtc) balConditions.push(bdtc);
+
         const balanceRes = await query(
           `SELECT COALESCE(SUM(amount), 0)::numeric as current_total
            FROM deals
-           WHERE stage_name NOT ILIKE '%closed%'
-             AND stage_name NOT ILIKE '%renewed%'
-             AND stage_name NOT ILIKE '%churn%'
-             AND pipeline IS NOT NULL`
+           WHERE ${balConditions.join(" AND ")}`,
+          balParams
         );
         const currentBalance = parseFloat(balanceRes.rows[0].current_total);
 
@@ -575,10 +597,8 @@ export async function GET(request: Request) {
         const lqc = quarterCondition(quarters, "cl.changed_at", ledgerParams);
         if (lqc) ledgerConditions.push(lqc);
 
-        if (pipelineFilter && pipelineFilter !== "all") {
-          ledgerParams.push(pipelineFilter);
-          ledgerConditions.push(`cl.pipeline = $${ledgerParams.length}`);
-        }
+        const lpc = pipelineCondition(pipelineFilter, "cl.pipeline", ledgerParams);
+        if (lpc) ledgerConditions.push(lpc);
 
         const ldtc = dealTypeCondition(dealTypeFilter, "d.deal_type", ledgerParams);
         if (ldtc) ledgerConditions.push(ldtc);

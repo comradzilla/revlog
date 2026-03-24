@@ -12,8 +12,9 @@ interface FilterDrawerProps {
   onDealTypeChange: (dt: string) => void;
   // Pipeline
   pipelines: { pipeline: string; pipeline_name: string; deal_count: number }[];
-  pipelineFilter: string;
-  onPipelineChange: (p: string) => void;
+  pipelineFilter: string[];
+  onPipelineToggle: (p: string) => void;
+  onPipelineClear: () => void;
   // Changelog filter
   filter: string;
   onFilterChange: (f: string) => void;
@@ -46,7 +47,8 @@ export function MobileFilterDrawer({
   onDealTypeChange,
   pipelines,
   pipelineFilter,
-  onPipelineChange,
+  onPipelineToggle,
+  onPipelineClear,
   filter,
   onFilterChange,
   changelogView = "changelog",
@@ -120,9 +122,9 @@ export function MobileFilterDrawer({
             <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase block mb-2">Pipeline</span>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => onPipelineChange("all")}
+                onClick={onPipelineClear}
                 className={`font-mono text-[11px] px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${
-                  pipelineFilter === "all"
+                  pipelineFilter.length === 0
                     ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
                     : "border-[var(--border-color)] text-[var(--text-muted)]"
                 }`}
@@ -132,9 +134,9 @@ export function MobileFilterDrawer({
               {pipelines.slice(0, 5).map((p) => (
                 <button
                   key={p.pipeline}
-                  onClick={() => onPipelineChange(p.pipeline)}
+                  onClick={() => onPipelineToggle(p.pipeline)}
                   className={`font-mono text-[11px] px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${
-                    pipelineFilter === p.pipeline
+                    pipelineFilter.includes(p.pipeline)
                       ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
                       : "border-[var(--border-color)] text-[var(--text-muted)]"
                   }`}
