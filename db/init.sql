@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS deals (
     updated_at TIMESTAMPTZ,
     stage_entered_at TIMESTAMPTZ,
     deal_type TEXT,
+    next_step TEXT,
     synced_at TIMESTAMPTZ DEFAULT NOW()
 );
 

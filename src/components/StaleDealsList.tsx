@@ -9,8 +9,9 @@ interface StaleDeal {
   stageName: string;
   pipelineName: string;
   ownerName: string;
-  lastActivity: string | null;
-  daysStale: number;
+  nextStep: string | null;
+  daysInStage: number;
+  lastNextStepUpdate: string | null;
 }
 
 function formatDollars(v: number): string {
@@ -40,12 +41,21 @@ export function StaleDealsList({
           <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
             Stale Deals
           </h2>
+          {/* Tooltip ? bubble */}
+          <span className="relative group cursor-help">
+            <span className="font-mono text-[10px] w-4 h-4 flex items-center justify-center rounded-full border border-[var(--text-muted)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--text-secondary)] transition-colors">
+              ?
+            </span>
+            <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 px-3 py-2 rounded bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-secondary)] font-mono text-[10px] leading-relaxed opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-lg pointer-events-none">
+              Deals in the same stage for 30+ days with no next step update in the last 14 days.
+            </span>
+          </span>
           <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-orange-dim)] text-[var(--accent-orange)] border border-[var(--accent-orange)]">
             {deals.length}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] text-[var(--text-muted)]">30d+ idle</span>
+          <span className="font-mono text-[10px] text-[var(--text-muted)]">in-stage</span>
           <span className="font-mono text-[10px] font-semibold text-[var(--accent-orange)]">
             {formatDollars(totalValue)}
           </span>
@@ -60,9 +70,10 @@ export function StaleDealsList({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors group"
+            title={deal.nextStep ? `Next step: ${deal.nextStep}` : "No next step set"}
           >
             <span className="font-mono text-[10px] text-[var(--accent-orange)] shrink-0 w-8 text-right">
-              {deal.daysStale}d
+              {deal.daysInStage}d
             </span>
             <span className="font-mono text-[10px] px-1 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)] shrink-0">
               {deal.stageName.replace(/^\d+\s*-\s*/, "")}

@@ -78,8 +78,9 @@ interface StaleDeal {
   stageName: string;
   pipelineName: string;
   ownerName: string;
-  lastActivity: string | null;
-  daysStale: number;
+  nextStep: string | null;
+  daysInStage: number;
+  lastNextStepUpdate: string | null;
 }
 
 function getCurrentQuarter(): string {

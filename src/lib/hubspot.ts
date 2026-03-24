@@ -121,6 +121,7 @@ export interface DealChange {
   ownerName: string;
   ownerId?: string;
   dealType?: string;
+  nextStep?: string;
 }
 
 export interface PropertyHistory {

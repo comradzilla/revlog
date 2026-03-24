@@ -531,20 +531,25 @@ export async function GET(request: Request) {
       }
 
       case "stale-deals": {
+        // Stale = in same stage for 30+ days AND next step not updated in 14+ days
         const result = await query(
           `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
+                  d.next_step,
                   COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
-                  GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)) as last_activity,
-                  EXTRACT(DAY FROM NOW() - GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)))::integer as days_stale
+                  EXTRACT(DAY FROM NOW() - d.stage_entered_at)::integer as days_in_stage,
+                  MAX(cl.changed_at) as last_next_step_update
            FROM deals d
-           LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property IN ('dealstage', 'amount')
+           LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property = 'hs_next_step'
            LEFT JOIN owners o ON o.id = d.owner_id
-           WHERE (d.stage_name ILIKE '%proposal%' OR d.stage_name ILIKE '%negotiat%'
-                  OR d.stage_name ILIKE '%propose%' OR d.stage_name ILIKE '%negotiate%'
-                  OR d.stage_name ILIKE '%solutioning%' OR d.stage_name ILIKE '%qualification%')
+           WHERE d.stage_entered_at < NOW() - INTERVAL '30 days'
              AND d.stage_name NOT ILIKE '%closed%'
-           GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name, d.created_at, o.first_name, o.last_name
-           HAVING GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)) < NOW() - INTERVAL '30 days'
+             AND d.stage_name NOT ILIKE '%renewed%'
+             AND d.stage_name NOT ILIKE '%churn%'
+             AND d.pipeline IS NOT NULL
+           GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
+                    d.next_step, d.stage_entered_at, o.first_name, o.last_name
+           HAVING MAX(cl.changed_at) IS NULL
+               OR MAX(cl.changed_at) < NOW() - INTERVAL '14 days'
            ORDER BY d.amount DESC NULLS LAST
            LIMIT 20`
         );
@@ -556,8 +561,9 @@ export async function GET(request: Request) {
           stageName: r.stage_name,
           pipelineName: r.pipeline_name,
           ownerName: r.owner_name,
-          lastActivity: r.last_activity,
-          daysStale: parseInt(r.days_stale) || 0,
+          nextStep: r.next_step || null,
+          daysInStage: parseInt(r.days_in_stage) || 0,
+          lastNextStepUpdate: r.last_next_step_update || null,
         }));
 
         const totalValue = deals.reduce((s, d) => s + d.amount, 0);

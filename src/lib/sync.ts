@@ -12,9 +12,10 @@ const HUBSPOT_API = "https://api.hubapi.com";
 const DEAL_PROPERTIES = [
   "dealname", "dealstage", "amount", "pipeline", "hubspot_owner_id",
   "closedate", "hs_lastmodifieddate", "hs_v2_date_entered_current_stage", "dealtype",
+  "hs_next_step",
 ];
 
-const TRACKED_HISTORY_PROPS = ["dealstage", "amount", "closedate", "hubspot_owner_id"];
+const TRACKED_HISTORY_PROPS = ["dealstage", "amount", "closedate", "hubspot_owner_id", "hs_next_step"];
 
 function headers() {
   return {
@@ -41,25 +42,26 @@ function parseDeal(deal: Record<string, Record<string, string>>): DealChange {
     ownerName: "",
     ownerId: p.hubspot_owner_id || undefined,
     dealType: p.dealtype || undefined,
+    nextStep: p.hs_next_step || undefined,
   };
 }
 
 async function upsertDeal(deal: DealChange) {
   await query(
-    `INSERT INTO deals (id, deal_name, pipeline, pipeline_name, deal_stage, stage_name, amount, close_date, owner_id, created_at, updated_at, stage_entered_at, deal_type, synced_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+    `INSERT INTO deals (id, deal_name, pipeline, pipeline_name, deal_stage, stage_name, amount, close_date, owner_id, created_at, updated_at, stage_entered_at, deal_type, next_step, synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
      ON CONFLICT (id) DO UPDATE SET
        deal_name = EXCLUDED.deal_name, pipeline = EXCLUDED.pipeline,
        pipeline_name = EXCLUDED.pipeline_name, deal_stage = EXCLUDED.deal_stage,
        stage_name = EXCLUDED.stage_name, amount = EXCLUDED.amount,
        close_date = EXCLUDED.close_date, owner_id = EXCLUDED.owner_id,
        updated_at = EXCLUDED.updated_at, stage_entered_at = EXCLUDED.stage_entered_at,
-       deal_type = EXCLUDED.deal_type, synced_at = NOW()`,
+       deal_type = EXCLUDED.deal_type, next_step = EXCLUDED.next_step, synced_at = NOW()`,
     [
       deal.id, deal.dealName, deal.pipeline, deal.pipelineName,
       deal.currentStage, deal.currentStageName, deal.amount, deal.closeDate,
       deal.ownerId || null, deal.createdAt, deal.lastModified,
-      deal.stageEnteredDate, deal.dealType || null,
+      deal.stageEnteredDate, deal.dealType || null, deal.nextStep || null,
     ]
   );
 }
@@ -321,6 +323,9 @@ export async function runFullSync(): Promise<{
   snapshot: boolean;
 }> {
   console.log("[sync:full] Starting full HubSpot sync...");
+
+  // Runtime migration: add next_step column if missing
+  await query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step TEXT`).catch(() => {});
 
   // 1. Sync owners (daily cadence — they rarely change)
   console.log("[sync:full] Syncing owners...");
