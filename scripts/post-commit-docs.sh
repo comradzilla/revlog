@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Hook script: runs after every Bash tool use.
-# If the command was a git commit, injects context telling Claude
-# to review the diff and update STATUS.md / CLAUDE.md if needed.
+# If the command was a git commit, REQUIRES Claude to review and update docs.
 
 set -e
 
@@ -29,7 +28,7 @@ cat <<ENDJSON
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "POST-COMMIT DOC CHECK: A git commit just landed.\n\nCommit: ${COMMIT_MSG}\nFiles changed: ${FILES_CHANGED}\nDiff stat:\n${DIFF_STAT}\n\nReview these changes and determine if STATUS.md or CLAUDE.md need updating. Rules:\n- UPDATE if: new features, new constants/IDs, new API endpoints, architecture changes, new gotchas, version bump, branch changes\n- SKIP if: typo fixes, CSS tweaks, formatting, test-only changes, doc-only changes (already updated)\n- If updating STATUS.md, also update the 'Last updated' date\n- If updating CLAUDE.md, keep it concise — it's auto-loaded every session\n- Tell the user what you updated and why (or that no update was needed)"
+    "additionalContext": "MANDATORY DOC REVIEW — DO NOT SKIP. A git commit just landed. You MUST review the changes below and update any relevant docs BEFORE moving to the next task.\n\nCommit: ${COMMIT_MSG}\nFiles changed: ${FILES_CHANGED}\nDiff stat:\n${DIFF_STAT}\n\nDOC CHECKLIST — review each file and update if relevant:\n\n1. STATUS.md — Update if: version bump, feature completion, current state change. Update 'Last updated' date.\n2. CLAUDE.md — Update if: new files, new constants/IDs, new API endpoints, architecture changes, new gotchas. Keep concise.\n3. CHANGELOG.md — Update if: version bump. Add detailed what/why/files entry.\n4. ARCHITECTURE.md — Update if: new API endpoints, schema changes, new data flows.\n5. DEPLOYMENT.md — Update if: new env vars, server config changes, deploy process changes.\n6. README.md — Update if: major feature additions, setup changes.\n7. src/app/updates/page.tsx — Update if: version bump. Add user-facing release notes.\n\nSKIP ALL only if: the commit is a typo fix, CSS-only tweak, test-only change, or doc-only change.\n\nTell the user which docs you updated (or that none needed updating and why)."
   }
 }
 ENDJSON
