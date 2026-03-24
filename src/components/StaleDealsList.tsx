@@ -31,7 +31,7 @@ export function StaleDealsList({
 
   if (deals.length === 0) return null;
 
-  const shown = expanded ? deals : deals.slice(0, 5);
+  const shown = expanded ? deals : deals.slice(0, 10);
 
   return (
     <div className="card-glow rounded-lg border border-[var(--accent-orange)] border-opacity-30 bg-[var(--bg-card)] p-5">
@@ -91,12 +91,12 @@ export function StaleDealsList({
         ))}
       </div>
 
-      {deals.length > 5 && (
+      {deals.length > 10 && (
         <button
           onClick={() => setExpanded(!expanded)}
           className="font-mono text-[10px] text-[var(--accent-orange)] mt-2 hover:underline cursor-pointer"
         >
-          {expanded ? "show less" : `+ ${deals.length - 5} more`}
+          {expanded ? "show less" : `+ ${deals.length - 10} more`}
         </button>
       )}
     </div>

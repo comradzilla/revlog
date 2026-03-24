@@ -532,6 +532,19 @@ export async function GET(request: Request) {
 
       case "stale-deals": {
         // Stale = in same stage for 30+ days AND next step not updated in 14+ days
+        const staleParams: (string | string[])[] = [];
+        const staleConditions = [
+          "d.stage_entered_at < NOW() - INTERVAL '30 days'",
+          "d.stage_name NOT ILIKE '%closed%'",
+          "d.stage_name NOT ILIKE '%renewed%'",
+          "d.stage_name NOT ILIKE '%churn%'",
+          "d.pipeline IS NOT NULL",
+        ];
+        const pc = pipelineCondition(pipelineFilter, "d.pipeline", staleParams);
+        if (pc) staleConditions.push(pc);
+        const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", staleParams);
+        if (dtc) staleConditions.push(dtc);
+
         const result = await query(
           `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
                   d.next_step,
@@ -541,17 +554,14 @@ export async function GET(request: Request) {
            FROM deals d
            LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property = 'hs_next_step'
            LEFT JOIN owners o ON o.id = d.owner_id
-           WHERE d.stage_entered_at < NOW() - INTERVAL '30 days'
-             AND d.stage_name NOT ILIKE '%closed%'
-             AND d.stage_name NOT ILIKE '%renewed%'
-             AND d.stage_name NOT ILIKE '%churn%'
-             AND d.pipeline IS NOT NULL
+           WHERE ${staleConditions.join(" AND ")}
            GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
                     d.next_step, d.stage_entered_at, o.first_name, o.last_name
            HAVING MAX(cl.changed_at) IS NULL
                OR MAX(cl.changed_at) < NOW() - INTERVAL '14 days'
            ORDER BY d.amount DESC NULLS LAST
-           LIMIT 20`
+           LIMIT 50`,
+          staleParams
         );
 
         const deals = result.rows.map((r: Record<string, string>) => ({

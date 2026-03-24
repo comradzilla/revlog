@@ -200,7 +200,7 @@ export default function Dashboard() {
           fetch(`/api/hubspot?type=closed-lost${qParam}`),
           fetch(`/api/hubspot?type=net-movement${qParam}`),
           fetch(`/api/hubspot?type=amount-movement${qParam}`),
-          fetch("/api/hubspot?type=stale-deals"),
+          fetch(`/api/hubspot?type=stale-deals${pParam}${dtParam}`),
           fetch("/api/hubspot?type=pipeline-list"),
           fetch("/api/hubspot?type=changes-count"),
         ]);
