@@ -204,17 +204,41 @@ export async function GET(request: Request) {
         return Response.json({ deals });
       }
 
+      case "changes-count": {
+        const ccResult = await query(
+          `SELECT
+             COUNT(*) FILTER (WHERE changed_at >= NOW() - INTERVAL '7 days')::integer as week,
+             COUNT(*) FILTER (WHERE changed_at >= CURRENT_DATE)::integer as today
+           FROM deal_changelog
+           WHERE property IN ('dealstage','amount','closedate','hubspot_owner_id')`
+        );
+        const ccRow = ccResult.rows[0] || { week: 0, today: 0 };
+        return Response.json({
+          weekChanges: parseInt(ccRow.week) || 0,
+          todayChanges: parseInt(ccRow.today) || 0,
+        });
+      }
+
       case "pipeline-stats": {
         const pipelineId = searchParams.get("pipeline") || "4207989";
+        const psParams: (string | string[])[] = [pipelineId];
+        const psConditions = ["pipeline = $1"];
+
+        // Add quarter filter on close_date
+        if (quarters.length > 0) {
+          const qc = quarterCondition(quarters, "close_date", psParams);
+          if (qc) psConditions.push(qc);
+        }
+
         const result = await query(
           `SELECT deal_stage as "stageId", stage_name as label,
                   COUNT(*)::integer as count,
                   COALESCE(SUM(amount), 0)::numeric as total_value
            FROM deals
-           WHERE pipeline = $1
+           WHERE ${psConditions.join(" AND ")}
            GROUP BY deal_stage, stage_name
            ORDER BY stage_name`,
-          [pipelineId]
+          psParams
         );
         const stats = result.rows.map((r: Record<string, string>) => ({
           stageId: r.stageId,
@@ -240,6 +264,12 @@ export async function GET(request: Request) {
         if (dtPipeline && dtPipeline !== "all") {
           dtParams.push(dtPipeline);
           dtWhere += ` AND pipeline = $${dtParams.length}`;
+        }
+
+        // Add quarter filter on close_date
+        if (quarters.length > 0) {
+          const qc = quarterCondition(quarters, "close_date", dtParams);
+          if (qc) dtWhere += ` AND ${qc}`;
         }
 
         const result = await query(
@@ -504,8 +534,8 @@ export async function GET(request: Request) {
         const result = await query(
           `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
                   COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
-                  MAX(cl.changed_at) as last_activity,
-                  EXTRACT(DAY FROM NOW() - MAX(cl.changed_at))::integer as days_stale
+                  GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)) as last_activity,
+                  EXTRACT(DAY FROM NOW() - GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)))::integer as days_stale
            FROM deals d
            LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property IN ('dealstage', 'amount')
            LEFT JOIN owners o ON o.id = d.owner_id
@@ -513,8 +543,8 @@ export async function GET(request: Request) {
                   OR d.stage_name ILIKE '%propose%' OR d.stage_name ILIKE '%negotiate%'
                   OR d.stage_name ILIKE '%solutioning%' OR d.stage_name ILIKE '%qualification%')
              AND d.stage_name NOT ILIKE '%closed%'
-           GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name, o.first_name, o.last_name
-           HAVING MAX(cl.changed_at) < NOW() - INTERVAL '30 days' OR MAX(cl.changed_at) IS NULL
+           GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name, d.created_at, o.first_name, o.last_name
+           HAVING GREATEST(d.created_at, COALESCE(MAX(cl.changed_at), d.created_at)) < NOW() - INTERVAL '30 days'
            ORDER BY d.amount DESC NULLS LAST
            LIMIT 20`
         );
@@ -527,7 +557,7 @@ export async function GET(request: Request) {
           pipelineName: r.pipeline_name,
           ownerName: r.owner_name,
           lastActivity: r.last_activity,
-          daysStale: parseInt(r.days_stale) || 999,
+          daysStale: parseInt(r.days_stale) || 0,
         }));
 
         const totalValue = deals.reduce((s, d) => s + d.amount, 0);

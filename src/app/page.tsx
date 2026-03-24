@@ -140,6 +140,7 @@ export default function Dashboard() {
   const [staleDeals, setStaleDeals] = useState<StaleDeal[]>([]);
   const [staleTotalValue, setStaleTotalValue] = useState(0);
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
+  const [changesCount, setChangesCount] = useState({ todayChanges: 0, weekChanges: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
@@ -186,12 +187,12 @@ export default function Dashboard() {
 
     try {
       const [recentRes, growthRes, renewalRes, upsellRes, valueRes, weightedRes,
-             closedWonRes, closedLostRes, netRes, amountRes, staleRes, pipelinesRes] =
+             closedWonRes, closedLostRes, netRes, amountRes, staleRes, pipelinesRes, changesCountRes] =
         await Promise.all([
           fetch(`/api/hubspot?type=recently-changed&limit=15${qParam}${pParam}${dtParam}`),
-          fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
-          fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
-          fetch(`/api/hubspot?type=dealtype-stats&dealType=upsell&dtPipeline=${upsellPipelineFilter}`),
+          fetch(`/api/hubspot?type=pipeline-stats&pipeline=4207989${qParam}`),
+          fetch(`/api/hubspot?type=pipeline-stats&pipeline=4762460${qParam}`),
+          fetch(`/api/hubspot?type=dealtype-stats&dealType=upsell&dtPipeline=${upsellPipelineFilter}${qParam}`),
           fetch(`/api/hubspot?type=pipeline-value${pParam}${dtParam}${qParam}`),
           fetch("/api/hubspot?type=weighted-pipeline"),
           fetch(`/api/hubspot?type=closed-won${qParam}`),
@@ -200,6 +201,7 @@ export default function Dashboard() {
           fetch(`/api/hubspot?type=amount-movement${qParam}`),
           fetch("/api/hubspot?type=stale-deals"),
           fetch("/api/hubspot?type=pipeline-list"),
+          fetch("/api/hubspot?type=changes-count"),
         ]);
 
       if (isStale()) return;
@@ -269,6 +271,10 @@ export default function Dashboard() {
         const d = await pipelinesRes.json();
         if (!isStale()) { setPipelines(d.pipelines || []); }
       }
+      if (changesCountRes.ok) {
+        const d = await changesCountRes.json();
+        if (!isStale()) { setChangesCount({ todayChanges: d.todayChanges || 0, weekChanges: d.weekChanges || 0 }); }
+      }
 
       if (!anySuccess && !isStale()) {
         setError("Failed to load data. Has the sync been run?");
@@ -326,17 +332,8 @@ export default function Dashboard() {
     };
   }, [fetchData]);
 
-  // Compute stats from changelog
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
-
-  const todayChanges = changelog.filter(
-    (c) => new Date(c.timestamp) >= todayStart
-  ).length;
-  const weekChanges = changelog.filter(
-    (c) => new Date(c.timestamp) >= weekStart
-  ).length;
+  // Use server-side changes count (Bug fix: client-side was limited by changelog fetch cap)
+  const { todayChanges, weekChanges } = changesCount;
 
   const quarterLabel = selectedQuarters.length <= 2
     ? selectedQuarters.join(",")
