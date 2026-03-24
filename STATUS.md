@@ -11,7 +11,7 @@ Last updated: 2026-03-24
 | Item | Value |
 |------|-------|
 | Branch | `v2-pipeline-intelligence` (not merged to main yet) |
-| Last version | v2.3 |
+| Last version | v2.3.2 |
 | Build | Passing (`npm run build` succeeds) |
 | Database | ~3,022 deals, 5 pipelines, ~57 stage label mappings |
 | HubSpot Hub ID | 3282655 |
@@ -100,6 +100,12 @@ Last updated: 2026-03-24
 - [x] Deploy script (pull + build + restart)
 - [x] Updates/dev notes page at /updates
 - [x] DigitalOcean deployment with SSL (Certbot) at app.revradar.io
+
+### v2.3.2 Bug Fixes
+- [x] Changes (7D) card: server-side count via `changes-count` endpoint (was client-side capped at 200)
+- [x] Pipeline funnel sidebar (Growth/Renewal/Upsell): quarter-scoped via `close_date` filter
+- [x] Stale deals: fallback to `created_at` when no changelog entries (fixes 999-day bug)
+- [x] Playwright UI/UX audit: 67 passing tests across 11 suites (on `playwright-ui-audit` branch)
 
 ---
 

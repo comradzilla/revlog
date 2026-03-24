@@ -4,6 +4,26 @@ Detailed version history for RevLog. Each entry documents what changed, why, and
 
 ---
 
+## v2.3.2 (2026-03-24) -- CEO Bug Fixes
+
+**Theme:** Fix 4 user-reported bugs from first CEO testing session.
+
+### What Changed
+
+- Changes (7D) card now uses server-side `changes-count` endpoint (was client-side capped at 200 records)
+- Pipeline funnel sidebar (Growth/Renewal/Upsell) now filters by selected quarter on `close_date`
+- Stale deals calculation uses `GREATEST(created_at, MAX(changelog))` to avoid 999-day fallback
+- Added Playwright test suite: 11 suites, 67 tests covering API validation, calculations, responsiveness, formatting, interactions, themes
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/app/api/hubspot/route.ts` | Added `changes-count` endpoint; added quarter filter to `pipeline-stats` + `dealtype-stats`; fixed stale deals `days_stale` to use `created_at` fallback |
+| `src/app/page.tsx` | Fetch `changes-count` from API; pass `qParam` to funnel fetch URLs; replaced client-side week/today calculations |
+
+---
+
 ## v2.3.1 (2026-03-24) -- Quarter-Scoped Ledger
 
 **Theme:** Ledger now only shows transactions that impact the selected quarter's balance.
