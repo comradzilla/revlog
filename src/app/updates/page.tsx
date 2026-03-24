@@ -12,6 +12,50 @@ interface Update {
 
 const UPDATES: Update[] = [
   {
+    version: "2.3.3",
+    date: "2026-03-24",
+    title: "Stale Deals Intelligence",
+    description:
+      "Smarter stale deal detection using time-in-stage and next step freshness, with full filter integration.",
+    changes: [
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Stale definition upgraded: 30+ days in same stage AND no next step update in 14+ days (was just last-modified)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "? tooltip on Stale Deals header explaining the detection criteria" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Stale deals now respect pipeline and deal type filters — select Growth to see only Growth stale deals" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Syncs hs_next_step property from HubSpot for staleness tracking" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Increased stale deal limit from 20 to 50, show-more threshold from 5 to 10" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "New DB columns: deals.next_step, deals.stage_entered_at for time-in-stage calculation" },
+    ],
+  },
+  {
+    version: "2.3.2",
+    date: "2026-03-24",
+    title: "CEO Bug Fixes + Playwright Audit",
+    description:
+      "Fixes reported by CEO user plus a comprehensive Playwright test suite for UI/UX consistency.",
+    changes: [
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Changes (7D) card — now uses server-side count endpoint instead of client-side capped at 200" },
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Pipeline funnel sidebar (Growth/Renewal/Upsell) — now quarter-scoped via close_date filter" },
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Stale deals 999-day bug — fallback to created_at when no changelog entries exist" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Playwright UI/UX audit: 67 tests across 11 suites (API, calculations, responsive, formatting, themes)" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "Post-commit doc hook strengthened — now MANDATORY, checks all 5 doc files" },
+    ],
+  },
+  {
+    version: "2.3.1",
+    date: "2026-03-24",
+    title: "Quarter-Scoped Ledger + Close Date Tracking",
+    description:
+      "Ledger now only shows transactions that impact the selected quarter's balance, plus tracks close date moves as pipeline events.",
+    changes: [
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Quarter-scoped transactions — only shows events that move the selected quarter's balance" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "DATE IN / DATE OUT badges — tracks deals entering or leaving the quarter via close date changes" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Hidden count banner — 'X out-of-quarter changes hidden' with dismiss button" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Flat list redesign — removed day grouping, each row shows date, type, deal, delta, balance" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Running balance anchored to quarter-scoped pipeline total when quarter selected" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Mobile ledger timestamps shortened to M-DD-YY format for single-line rows" },
+    ],
+  },
+  {
     version: "2.3",
     date: "2026-03-23",
     title: "Pipeline Ledger + Smart Filters",
@@ -176,7 +220,7 @@ const DEV_NOTES = [
       "Full sync: owners → all deals (paginated) → 7-day changelog window → pipeline snapshot",
       "Self-scheduling via Next.js instrumentation hook — no external cron",
       "Changelog deduplication: checks deal_id + property + changed_at before insert",
-      "Properties tracked: dealstage, amount, closedate, hubspot_owner_id",
+      "Properties tracked: dealstage, amount, closedate, hubspot_owner_id, hs_next_step",
       "Deal creation events generated from deals.created_at during sync",
       "Pipeline snapshots captured with weighted values using stage probability weights",
     ],
