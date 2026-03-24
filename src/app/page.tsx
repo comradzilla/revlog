@@ -12,6 +12,7 @@ import { StaleDealsList } from "@/components/StaleDealsList";
 import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
 import { MobileStatsSummary } from "@/components/MobileStatsSummary";
 import { MobileSidebarTabs } from "@/components/MobileSidebarTabs";
+import { PipelineLedger } from "@/components/PipelineLedger";
 
 interface ChangelogEntry {
   dealId: string;
@@ -148,6 +149,9 @@ export default function Dashboard() {
   const [dealTypeFilter, setDealTypeFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
+  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; days: { date: string; dateLabel: string; dailyNet: number; endOfDayBalance: number; transactionCount: number; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string }[] }[] } | null>(null);
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   const activeRequest = useRef(0);
 
@@ -270,14 +274,19 @@ export default function Dashboard() {
         setIsLoading(false);
       }
 
-      // Fetch changelog and sync metadata separately
-      const [changelogRes, syncMetaRes] = await Promise.all([
+      // Fetch changelog, ledger, and sync metadata separately
+      const [changelogRes, syncMetaRes, ledgerRes] = await Promise.all([
         fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`),
         fetch("/api/hubspot?type=sync-status"),
+        fetch(`/api/hubspot?type=pipeline-ledger${qParam}${pParam}${dtParam}`),
       ]);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
         if (!isStale()) setChangelog(d.changelogs || []);
+      }
+      if (ledgerRes.ok && !isStale()) {
+        const d = await ledgerRes.json();
+        if (!isStale()) setLedgerData(d);
       }
       if (syncMetaRes.ok && !isStale()) {
         const d = await syncMetaRes.json();
@@ -479,52 +488,113 @@ export default function Dashboard() {
           <div className="lg:col-span-7 xl:col-span-8">
             <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-3 sm:p-5">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 relative">
                   <span className="font-mono text-xs text-[var(--accent-orange)]">
                     &gt;
                   </span>
-                  <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-                    Changelog
-                  </h2>
-                  {changelog.length > 0 && (
+                  <button
+                    onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
+                    className="flex items-center gap-1.5 cursor-pointer group"
+                  >
+                    <h2 className="font-mono text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wider group-hover:text-[var(--accent-blue)] transition-colors">
+                      {changelogView === "changelog" ? "Changelog" : "Pipeline Ledger"}
+                    </h2>
+                    <svg className={`w-3 h-3 text-[var(--text-muted)] transition-transform duration-200 ${viewDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {changelogView === "changelog" && changelog.length > 0 && (
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)] border border-[var(--border-color)]">
                       {changelog.length}
                     </span>
                   )}
+                  {changelogView === "ledger" && ledgerData && (
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)] border border-[var(--border-color)]">
+                      {ledgerData.days.length}d
+                    </span>
+                  )}
+
+                  {/* View dropdown */}
+                  {viewDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 z-50 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg shadow-lg overflow-hidden min-w-[180px]">
+                      <button
+                        onClick={() => { setChangelogView("changelog"); setViewDropdownOpen(false); }}
+                        className={`w-full text-left px-3 py-2 font-mono text-xs transition-colors cursor-pointer ${
+                          changelogView === "changelog"
+                            ? "bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]"
+                        }`}
+                      >
+                        Changelog
+                        <span className="block text-[10px] text-[var(--text-muted)]">All deal changes</span>
+                      </button>
+                      <button
+                        onClick={() => { setChangelogView("ledger"); setViewDropdownOpen(false); }}
+                        className={`w-full text-left px-3 py-2 font-mono text-xs transition-colors cursor-pointer ${
+                          changelogView === "ledger"
+                            ? "bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)]"
+                        }`}
+                      >
+                        Pipeline Ledger
+                        <span className="block text-[10px] text-[var(--text-muted)]">Running balance view</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Filter tabs (desktop only — on mobile, filters are in the drawer) */}
-                <div className="hidden sm:flex items-center gap-1">
-                  {FILTER_TABS.map((f) => (
-                    <button
-                      key={f.key}
-                      onClick={() => setFilter(f.key)}
-                      className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
-                        filter === f.key
-                          ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
-                          : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
+                {changelogView === "changelog" && (
+                  <div className="hidden sm:flex items-center gap-1">
+                    {FILTER_TABS.map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => setFilter(f.key)}
+                        className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                          filter === f.key
+                            ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                            : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {isLoading && changelog.length === 0 ? (
-                <div className="space-y-3 py-4">
-                  {[...Array(8)].map((_, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-2.5 h-2.5 rounded-full bg-[var(--bg-secondary)] animate-pulse" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-3 bg-[var(--bg-secondary)] rounded animate-pulse w-3/4" />
-                        <div className="h-2 bg-[var(--bg-secondary)] rounded animate-pulse w-1/2" />
+              {changelogView === "changelog" ? (
+                isLoading && changelog.length === 0 ? (
+                  <div className="space-y-3 py-4">
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full bg-[var(--bg-secondary)] animate-pulse" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 bg-[var(--bg-secondary)] rounded animate-pulse w-3/4" />
+                          <div className="h-2 bg-[var(--bg-secondary)] rounded animate-pulse w-1/2" />
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ChangelogFeed entries={changelog} filter={filter} />
+                )
               ) : (
-                <ChangelogFeed entries={changelog} filter={filter} />
+                ledgerData ? (
+                  <PipelineLedger currentBalance={ledgerData.currentBalance} days={ledgerData.days} />
+                ) : (
+                  <div className="space-y-3 py-4">
+                    {[...Array(6)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full bg-[var(--bg-secondary)] animate-pulse" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className="h-3 bg-[var(--bg-secondary)] rounded animate-pulse w-3/4" />
+                          <div className="h-2 bg-[var(--bg-secondary)] rounded animate-pulse w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -628,6 +698,7 @@ export default function Dashboard() {
         onPipelineChange={setPipelineFilter}
         filter={filter}
         onFilterChange={setFilter}
+        changelogView={changelogView}
       />
     </div>
   );

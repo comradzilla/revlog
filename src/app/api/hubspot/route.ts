@@ -540,6 +540,176 @@ export async function GET(request: Request) {
         return Response.json({ history: result.rows });
       }
 
+      case "pipeline-ledger": {
+        // 1. Get current open pipeline total
+        const balanceRes = await query(
+          `SELECT COALESCE(SUM(amount), 0)::numeric as current_total
+           FROM deals
+           WHERE stage_name NOT ILIKE '%closed%'
+             AND stage_name NOT ILIKE '%renewed%'
+             AND stage_name NOT ILIKE '%churn%'
+             AND pipeline IS NOT NULL`
+        );
+        const currentBalance = parseFloat(balanceRes.rows[0].current_total);
+
+        // 2. Fetch all value-affecting changelog events
+        const ledgerParams: (string | number | Date | string[])[] = [];
+        const ledgerConditions: string[] = [];
+
+        // Only value-affecting events:
+        // - amount changes
+        // - deal created (enters pipeline with value)
+        // - stage change TO a closed stage (exits pipeline)
+        // - stage change FROM a closed stage (re-enters pipeline)
+        ledgerConditions.push(`(
+          cl.property = 'amount'
+          OR cl.property = 'created'
+          OR (cl.property = 'dealstage' AND (
+            cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%closed lost%'
+            OR cl.new_label ILIKE '%renewed%' OR cl.new_label ILIKE '%churn%'
+            OR cl.old_label ILIKE '%closed won%' OR cl.old_label ILIKE '%closed lost%'
+            OR cl.old_label ILIKE '%renewed%' OR cl.old_label ILIKE '%churn%'
+          ))
+        )`);
+
+        const lqc = quarterCondition(quarters, "cl.changed_at", ledgerParams);
+        if (lqc) ledgerConditions.push(lqc);
+
+        if (pipelineFilter && pipelineFilter !== "all") {
+          ledgerParams.push(pipelineFilter);
+          ledgerConditions.push(`cl.pipeline = $${ledgerParams.length}`);
+        }
+
+        const ldtc = dealTypeCondition(dealTypeFilter, "d.deal_type", ledgerParams);
+        if (ldtc) ledgerConditions.push(ldtc);
+
+        const ledgerSql = `
+          SELECT cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name,
+                 cl.property, cl.old_value, cl.new_value, cl.old_label, cl.new_label,
+                 cl.changed_at, d.amount as current_amount
+          FROM deal_changelog cl
+          LEFT JOIN deals d ON d.id = cl.deal_id
+          WHERE ${ledgerConditions.join(" AND ")}
+          ORDER BY cl.changed_at DESC
+          LIMIT 500`;
+
+        const ledgerResult = await query(ledgerSql, ledgerParams);
+
+        // 3. Compute deltas and group by day
+        interface LedgerTxn {
+          dealId: string;
+          dealName: string;
+          pipelineName: string;
+          type: string;
+          delta: number;
+          description: string;
+          timestamp: string;
+        }
+
+        const dayMap = new Map<string, { dateLabel: string; transactions: LedgerTxn[] }>();
+
+        for (const r of ledgerResult.rows) {
+          let delta = 0;
+          let type = "amount_change";
+          let description = "";
+
+          if (r.property === "amount") {
+            const oldAmt = parseFloat(r.old_value) || 0;
+            const newAmt = parseFloat(r.new_value) || 0;
+            delta = newAmt - oldAmt;
+            type = "amount_change";
+            description = `${r.old_label || "$0"} → ${r.new_label || "$0"}`;
+          } else if (r.property === "created") {
+            // new_value for created events is a stage ID, not an amount
+            // Extract amount from new_label (e.g., "01 - Prospecting — $100,000") or use current_amount
+            const labelAmountMatch = (r.new_label || "").match(/\$[\d,]+/);
+            if (labelAmountMatch) {
+              delta = parseFloat(labelAmountMatch[0].replace(/[$,]/g, "")) || 0;
+            } else {
+              delta = parseFloat(r.current_amount) || 0;
+            }
+            type = "deal_created";
+            description = delta > 0 ? `New deal — ${r.new_label}` : "New deal — $0";
+          } else if (r.property === "dealstage") {
+            const newLower = (r.new_label || "").toLowerCase();
+            const oldLower = (r.old_label || "").toLowerCase();
+            const closedPatterns = ["closed won", "closed lost", "renewed", "churn"];
+            const isClosingNow = closedPatterns.some(p => newLower.includes(p));
+            const wasClosedBefore = closedPatterns.some(p => oldLower.includes(p));
+
+            if (isClosingNow && !wasClosedBefore) {
+              // Deal exiting pipeline
+              const amt = parseFloat(r.current_amount) || 0;
+              delta = -amt;
+              const isWon = newLower.includes("closed won") || newLower.includes("renewed");
+              type = isWon ? "closed_won" : "closed_lost";
+              description = `${r.old_label} → ${r.new_label}`;
+            } else if (wasClosedBefore && !isClosingNow) {
+              // Deal re-entering pipeline
+              const amt = parseFloat(r.current_amount) || 0;
+              delta = amt;
+              type = "reopened";
+              description = `${r.old_label} → ${r.new_label}`;
+            } else {
+              // Both old and new are closed — no net pipeline impact
+              continue;
+            }
+          }
+
+          const dt = new Date(r.changed_at);
+          const dateKey = dt.toISOString().split("T")[0];
+          const dateLabel = dt.toLocaleDateString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          }).toUpperCase().replace(",", "");
+
+          if (!dayMap.has(dateKey)) {
+            dayMap.set(dateKey, { dateLabel, transactions: [] });
+          }
+
+          dayMap.get(dateKey)!.transactions.push({
+            dealId: r.deal_id,
+            dealName: r.deal_name,
+            pipelineName: r.pipeline_name,
+            type,
+            delta,
+            description,
+            timestamp: dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+          });
+        }
+
+        // 4. Compute running balance (newest day = currentBalance, work backward)
+        const sortedDates = Array.from(dayMap.keys()).sort((a, b) => b.localeCompare(a));
+        let runningBalance = currentBalance;
+
+        const days = sortedDates.map((dateKey, i) => {
+          const day = dayMap.get(dateKey)!;
+          const dailyNet = day.transactions.reduce((sum, t) => sum + t.delta, 0);
+          const endOfDayBalance = i === 0 ? runningBalance : runningBalance;
+
+          if (i > 0) {
+            // This day's end-of-day balance was already set above
+          }
+
+          const result = {
+            date: dateKey,
+            dateLabel: day.dateLabel,
+            dailyNet,
+            endOfDayBalance: runningBalance,
+            transactionCount: day.transactions.length,
+            transactions: day.transactions,
+          };
+
+          // Subtract this day's net to get the previous day's end-of-day balance
+          runningBalance -= dailyNet;
+
+          return result;
+        });
+
+        return Response.json({ currentBalance, days });
+      }
+
       default:
         return Response.json({ error: "Unknown type" }, { status: 400 });
     }

@@ -17,6 +17,8 @@ interface FilterDrawerProps {
   // Changelog filter
   filter: string;
   onFilterChange: (f: string) => void;
+  // View mode
+  changelogView?: "changelog" | "ledger";
 }
 
 const DEAL_TYPES = [
@@ -47,6 +49,7 @@ export function MobileFilterDrawer({
   onPipelineChange,
   filter,
   onFilterChange,
+  changelogView = "changelog",
 }: FilterDrawerProps) {
   if (!isOpen) return null;
 
@@ -142,25 +145,27 @@ export function MobileFilterDrawer({
             </div>
           </div>
 
-          {/* Changelog type */}
-          <div>
-            <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase block mb-2">Change Type</span>
-            <div className="flex flex-wrap gap-1.5">
-              {CHANGE_FILTERS.map((f) => (
-                <button
-                  key={f.key}
-                  onClick={() => onFilterChange(f.key)}
-                  className={`font-mono text-[11px] px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${
-                    filter === f.key
-                      ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
-                      : "border-[var(--border-color)] text-[var(--text-muted)]"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
+          {/* Changelog type — only shown in changelog view */}
+          {changelogView === "changelog" && (
+            <div>
+              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase block mb-2">Change Type</span>
+              <div className="flex flex-wrap gap-1.5">
+                {CHANGE_FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => onFilterChange(f.key)}
+                    className={`font-mono text-[11px] px-2.5 py-1.5 rounded border transition-colors cursor-pointer ${
+                      filter === f.key
+                        ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                        : "border-[var(--border-color)] text-[var(--text-muted)]"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
