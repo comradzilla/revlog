@@ -150,7 +150,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
-  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; days: { date: string; dateLabel: string; dailyNet: number; endOfDayBalance: number; transactionCount: number; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string }[] }[] } | null>(null);
+  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; balance: number }[] } | null>(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   const activeRequest = useRef(0);
@@ -519,7 +519,7 @@ export default function Dashboard() {
                   )}
                   {changelogView === "ledger" && ledgerData && (
                     <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)] border border-[var(--border-color)]">
-                      {ledgerData.days.length}d
+                      {ledgerData.transactions.length}
                     </span>
                   )}
 
@@ -590,7 +590,7 @@ export default function Dashboard() {
                 )
               ) : (
                 ledgerData ? (
-                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} days={ledgerData.days} />
+                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} transactions={ledgerData.transactions} />
                 ) : (
                   <div className="space-y-3 py-4">
                     {[...Array(6)].map((_, i) => (

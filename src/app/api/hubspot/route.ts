@@ -650,8 +650,8 @@ export async function GET(request: Request) {
 
         const ledgerResult = await query(ledgerSql, ledgerParams);
 
-        // 3. Compute deltas and group by day
-        interface LedgerTxn {
+        // 3. Compute deltas for each event
+        const transactions: {
           dealId: string;
           dealName: string;
           pipelineName: string;
@@ -659,9 +659,8 @@ export async function GET(request: Request) {
           delta: number;
           description: string;
           timestamp: string;
-        }
-
-        const dayMap = new Map<string, { dateLabel: string; transactions: LedgerTxn[] }>();
+          balance: number;
+        }[] = [];
 
         for (const r of ledgerResult.rows) {
           let delta = 0;
@@ -712,57 +711,33 @@ export async function GET(request: Request) {
           }
 
           const dt = new Date(r.changed_at);
-          const dateKey = dt.toISOString().split("T")[0];
-          const dateLabel = dt.toLocaleDateString("en-US", {
-            weekday: "short",
+          const timestamp = dt.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
-          }).toUpperCase().replace(",", "");
+          }) + ", " + dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-          if (!dayMap.has(dateKey)) {
-            dayMap.set(dateKey, { dateLabel, transactions: [] });
-          }
-
-          dayMap.get(dateKey)!.transactions.push({
+          transactions.push({
             dealId: r.deal_id,
             dealName: r.deal_name,
             pipelineName: r.pipeline_name,
             type,
             delta,
             description,
-            timestamp: dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            timestamp,
+            balance: 0, // computed below
           });
         }
 
-        // 4. Compute running balance (newest day = currentBalance, work backward)
-        const sortedDates = Array.from(dayMap.keys()).sort((a, b) => b.localeCompare(a));
-        let runningBalance = currentBalance;
+        // 4. Compute running balance per transaction
+        // Anchor to quarter balance when filtered, otherwise all-time
+        let runningBalance = quarterBalance ?? currentBalance;
 
-        const days = sortedDates.map((dateKey, i) => {
-          const day = dayMap.get(dateKey)!;
-          const dailyNet = day.transactions.reduce((sum, t) => sum + t.delta, 0);
-          const endOfDayBalance = i === 0 ? runningBalance : runningBalance;
+        for (let i = 0; i < transactions.length; i++) {
+          transactions[i].balance = runningBalance;
+          runningBalance -= transactions[i].delta;
+        }
 
-          if (i > 0) {
-            // This day's end-of-day balance was already set above
-          }
-
-          const result = {
-            date: dateKey,
-            dateLabel: day.dateLabel,
-            dailyNet,
-            endOfDayBalance: runningBalance,
-            transactionCount: day.transactions.length,
-            transactions: day.transactions,
-          };
-
-          // Subtract this day's net to get the previous day's end-of-day balance
-          runningBalance -= dailyNet;
-
-          return result;
-        });
-
-        return Response.json({ currentBalance, quarterBalance, quarterLabel, days });
+        return Response.json({ currentBalance, quarterBalance, quarterLabel, transactions });
       }
 
       default:

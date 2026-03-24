@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 interface LedgerTransaction {
   dealId: string;
   dealName: string;
@@ -10,22 +8,14 @@ interface LedgerTransaction {
   delta: number;
   description: string;
   timestamp: string;
-}
-
-interface LedgerDay {
-  date: string;
-  dateLabel: string;
-  dailyNet: number;
-  endOfDayBalance: number;
-  transactionCount: number;
-  transactions: LedgerTransaction[];
+  balance: number;
 }
 
 interface PipelineLedgerProps {
   currentBalance: number;
   quarterBalance?: number | null;
   quarterLabel?: string | null;
-  days: LedgerDay[];
+  transactions: LedgerTransaction[];
 }
 
 function formatCurrency(value: number, compact = false): string {
@@ -62,22 +52,8 @@ const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   reopened: { label: "REOPENED", color: "var(--accent-blue)" },
 };
 
-export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, days }: PipelineLedgerProps) {
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-
-  const toggleDay = (date: string) => {
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-      } else {
-        next.add(date);
-      }
-      return next;
-    });
-  };
-
-  if (days.length === 0) {
+export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, transactions }: PipelineLedgerProps) {
+  if (transactions.length === 0) {
     return (
       <div className="font-mono text-xs text-[var(--text-muted)] py-8 text-center">
         No pipeline value changes found for this period.
@@ -86,8 +62,8 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, d
   }
 
   return (
-    <div className="space-y-0">
-      {/* Current balance header */}
+    <div>
+      {/* Balance header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-[var(--border-color)]">
         <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
           {quarterLabel ? "Pipeline Balance" : "Current Pipeline Balance"}
@@ -113,105 +89,54 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, d
         </div>
       </div>
 
-      {/* Day rows */}
+      {/* Transaction list */}
       <div className="space-y-0">
-        {days.map((day) => {
-          const isExpanded = expandedDays.has(day.date);
+        {transactions.map((txn, i) => {
+          const config = TYPE_CONFIG[txn.type] || { label: txn.type, color: "var(--text-muted)" };
 
           return (
-            <div key={day.date}>
-              {/* Day summary row */}
-              <button
-                onClick={() => toggleDay(day.date)}
-                className="w-full flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-0 py-2.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs cursor-pointer group"
-              >
-                {/* Left: chevron + date + count */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={`text-[var(--text-muted)] transition-transform duration-200 ${
-                      isExpanded ? "rotate-90" : ""
-                    }`}
-                  >
-                    ▸
-                  </span>
-                  <span className="text-[var(--text-muted)] uppercase tracking-wider font-semibold whitespace-nowrap">
-                    {day.dateLabel}
-                  </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-muted)] border border-[var(--border-color)]">
-                    {day.transactionCount}
-                  </span>
-                </div>
+            <a
+              key={`${txn.dealId}-${txn.timestamp}-${i}`}
+              href={`https://app.hubspot.com/contacts/3282655/record/0-3/${txn.dealId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group"
+            >
+              {/* Line 1: timestamp + type badge + deal name */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[var(--text-muted)] shrink-0 w-[100px] sm:w-[120px] text-right text-[10px] sm:text-xs whitespace-nowrap">
+                  {txn.timestamp}
+                </span>
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
+                  style={{
+                    borderColor: `${config.color}44`,
+                    backgroundColor: `${config.color}15`,
+                    color: config.color,
+                  }}
+                >
+                  {config.label}
+                </span>
+                <span className="text-[var(--text-secondary)] truncate min-w-0 group-hover:text-[var(--accent-blue)] transition-colors">
+                  {txn.dealName}
+                </span>
+              </div>
 
-                {/* Right: net + balance */}
-                <div className="flex items-center gap-3 sm:ml-auto pl-5 sm:pl-0">
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">net:</span>
-                  <span className={`font-semibold whitespace-nowrap ${deltaColor(day.dailyNet)}`}>
-                    {formatDelta(day.dailyNet)}
+              {/* Line 2 (mobile) / inline (desktop): description + delta + balance */}
+              <div className="flex items-center gap-2 sm:ml-auto pl-[104px] sm:pl-0 min-w-0 overflow-hidden whitespace-nowrap">
+                {txn.description && (
+                  <span className="text-[var(--text-muted)] text-[10px] truncate hidden sm:inline">
+                    {txn.description}
                   </span>
-                  <span className="text-[var(--text-primary)] font-semibold whitespace-nowrap">
-                    {formatCurrency(day.endOfDayBalance, true)}
-                  </span>
-                </div>
-              </button>
-
-              {/* Expanded transactions */}
-              {isExpanded && (
-                <div className="ml-3 sm:ml-5 mb-2 border-l-2 border-[var(--border-color)] pl-3 sm:pl-4 space-y-0">
-                  {day.transactions.map((txn, i) => {
-                    const config = TYPE_CONFIG[txn.type] || {
-                      label: txn.type,
-                      color: "var(--text-muted)",
-                    };
-                    const isLast = i === day.transactions.length - 1;
-
-                    return (
-                      <a
-                        key={`${txn.dealId}-${txn.timestamp}-${i}`}
-                        href={`https://app.hubspot.com/contacts/3282655/record/0-3/${txn.dealId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-1 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group/txn"
-                      >
-                        {/* Connector dot */}
-                        <div className="absolute -left-[7px] w-2 h-2 rounded-full bg-[var(--border-color)]" style={{ display: "none" }} />
-
-                        {/* Line 1 (mobile) / inline (desktop): timestamp + type badge + deal name */}
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[var(--text-muted)] shrink-0 w-[52px] text-right">
-                            {txn.timestamp}
-                          </span>
-                          <span
-                            className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
-                            style={{
-                              borderColor: `${config.color}44`,
-                              backgroundColor: `${config.color}15`,
-                              color: config.color,
-                            }}
-                          >
-                            {config.label}
-                          </span>
-                          <span className="text-[var(--text-secondary)] truncate min-w-0 group-hover/txn:text-[var(--accent-blue)] transition-colors">
-                            {txn.dealName}
-                          </span>
-                        </div>
-
-                        {/* Line 2 (mobile) / inline (desktop): description + delta */}
-                        <div className="flex items-center gap-2 sm:ml-auto pl-[56px] sm:pl-0 min-w-0">
-                          {txn.description && (
-                            <span className="text-[var(--text-muted)] text-[10px] truncate">
-                              {txn.description}
-                            </span>
-                          )}
-                          <span className={`font-semibold whitespace-nowrap shrink-0 ${deltaColor(txn.delta)}`}>
-                            {formatDelta(txn.delta)}
-                          </span>
-                        </div>
-                      </a>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                )}
+                <span className={`font-semibold shrink-0 ${deltaColor(txn.delta)}`}>
+                  {formatDelta(txn.delta)}
+                </span>
+                <span className="text-[var(--text-primary)] font-semibold shrink-0">
+                  {formatCurrency(txn.balance, true)}
+                </span>
+              </div>
+            </a>
           );
         })}
       </div>
