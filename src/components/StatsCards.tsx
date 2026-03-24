@@ -3,6 +3,8 @@
 interface Stats {
   totalOpenDeals: number;
   totalOpenValue: number;
+  filteredOpenValue?: number | null;
+  filteredOpenDeals?: number | null;
   weightedPipelineValue: number;
   todayChanges: number;
   weekChanges: number;
@@ -40,9 +42,13 @@ export function StatsCards({ stats }: { stats: Stats }) {
 
   const cards = [
     {
-      label: "Open Pipeline (All)",
-      value: formatDollars(stats.totalOpenValue),
-      sub: `${stats.totalOpenDeals} deals · wtd: ${formatDollars(stats.weightedPipelineValue)}`,
+      label: "Open Pipeline",
+      value: stats.filteredOpenValue != null
+        ? formatDollars(stats.filteredOpenValue)
+        : formatDollars(stats.totalOpenValue),
+      sub: stats.filteredOpenValue != null
+        ? `${stats.filteredOpenDeals} deals · all: ${formatDollars(stats.totalOpenValue)}`
+        : `${stats.totalOpenDeals} deals · wtd: ${formatDollars(stats.weightedPipelineValue)}`,
       color: "var(--accent-blue)",
       icon: "~",
     },

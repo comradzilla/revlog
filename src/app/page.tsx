@@ -131,7 +131,7 @@ export default function Dashboard() {
   const [upsellTotals, setUpsellTotals] = useState({ totalCount: 0, totalValue: 0 });
   const [upsellPipelines, setUpsellPipelines] = useState<{ pipeline: string; pipeline_name: string; count: number }[]>([]);
   const [upsellPipelineFilter, setUpsellPipelineFilter] = useState("4207989");
-  const [pipelineValue, setPipelineValue] = useState({ totalValue: 0, count: 0 });
+  const [pipelineValue, setPipelineValue] = useState({ totalValue: 0, count: 0, filteredValue: null as number | null, filteredCount: null as number | null });
   const [weightedPipeline, setWeightedPipeline] = useState(0);
   const [closedWon, setClosedWon] = useState({ totalValue: 0, count: 0 });
   const [closedLost, setClosedLost] = useState({ totalValue: 0, count: 0 });
@@ -192,7 +192,7 @@ export default function Dashboard() {
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4207989"),
           fetch("/api/hubspot?type=pipeline-stats&pipeline=4762460"),
           fetch(`/api/hubspot?type=dealtype-stats&dealType=upsell&dtPipeline=${upsellPipelineFilter}`),
-          fetch("/api/hubspot?type=pipeline-value"),
+          fetch(`/api/hubspot?type=pipeline-value${pParam}${dtParam}${qParam}`),
           fetch("/api/hubspot?type=weighted-pipeline"),
           fetch(`/api/hubspot?type=closed-won${qParam}`),
           fetch(`/api/hubspot?type=closed-lost${qParam}`),
@@ -345,6 +345,8 @@ export default function Dashboard() {
   const stats = {
     totalOpenDeals: pipelineValue.count,
     totalOpenValue: pipelineValue.totalValue,
+    filteredOpenValue: pipelineValue.filteredValue,
+    filteredOpenDeals: pipelineValue.filteredCount,
     weightedPipelineValue: weightedPipeline,
     todayChanges,
     weekChanges,

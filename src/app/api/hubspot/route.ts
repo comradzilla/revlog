@@ -276,7 +276,8 @@ export async function GET(request: Request) {
       }
 
       case "pipeline-value": {
-        const result = await query(
+        // Global total (always unfiltered)
+        const globalResult = await query(
           `SELECT COUNT(*)::integer as count, COALESCE(SUM(amount), 0)::numeric as total_value
            FROM deals
            WHERE stage_name NOT ILIKE '%closed%'
@@ -284,11 +285,41 @@ export async function GET(request: Request) {
              AND stage_name NOT ILIKE '%churn%'
              AND pipeline IS NOT NULL`
         );
-        const row = result.rows[0];
-        return Response.json({
-          totalValue: parseFloat(row.total_value),
-          count: row.count,
-        });
+        const globalRow = globalResult.rows[0];
+        const totalValue = parseFloat(globalRow.total_value);
+        const count = globalRow.count;
+
+        // Filtered total (pipeline + dealType + quarter on close_date)
+        const hasFilters = (pipelineFilter && pipelineFilter !== "all") || (dealTypeFilter && dealTypeFilter !== "all") || quarters.length > 0;
+        let filteredValue: number | null = null;
+        let filteredCount: number | null = null;
+
+        if (hasFilters) {
+          const fParams: (string | number | Date | string[])[] = [];
+          const fConditions: string[] = [
+            "stage_name NOT ILIKE '%closed%'",
+            "stage_name NOT ILIKE '%renewed%'",
+            "stage_name NOT ILIKE '%churn%'",
+            "pipeline IS NOT NULL",
+          ];
+          const fpc = pipelineCondition(pipelineFilter, "pipeline", fParams);
+          if (fpc) fConditions.push(fpc);
+          const fdtc = dealTypeCondition(dealTypeFilter, "deal_type", fParams);
+          if (fdtc) fConditions.push(fdtc);
+          const fqc = quarterCondition(quarters, "close_date", fParams);
+          if (fqc) fConditions.push(fqc);
+
+          const filteredResult = await query(
+            `SELECT COUNT(*)::integer as count, COALESCE(SUM(amount), 0)::numeric as total_value
+             FROM deals
+             WHERE ${fConditions.join(" AND ")}`,
+            fParams
+          );
+          filteredValue = parseFloat(filteredResult.rows[0].total_value);
+          filteredCount = filteredResult.rows[0].count;
+        }
+
+        return Response.json({ totalValue, count, filteredValue, filteredCount });
       }
 
       case "weighted-pipeline": {
