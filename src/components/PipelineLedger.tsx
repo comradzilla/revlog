@@ -23,6 +23,8 @@ interface LedgerDay {
 
 interface PipelineLedgerProps {
   currentBalance: number;
+  quarterBalance?: number | null;
+  quarterLabel?: string | null;
   days: LedgerDay[];
 }
 
@@ -60,7 +62,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   reopened: { label: "REOPENED", color: "var(--accent-blue)" },
 };
 
-export function PipelineLedger({ currentBalance, days }: PipelineLedgerProps) {
+export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, days }: PipelineLedgerProps) {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const toggleDay = (date: string) => {
@@ -88,11 +90,27 @@ export function PipelineLedger({ currentBalance, days }: PipelineLedgerProps) {
       {/* Current balance header */}
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-[var(--border-color)]">
         <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase tracking-wider">
-          Current Pipeline Balance
+          {quarterLabel ? "Pipeline Balance" : "Current Pipeline Balance"}
         </span>
-        <span className="font-mono text-lg font-bold text-[var(--accent-cyan)]">
-          {formatCurrency(currentBalance, true)}
-        </span>
+        <div className="flex items-center gap-2 font-mono">
+          {quarterBalance != null && quarterLabel ? (
+            <>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase">{quarterLabel}:</span>
+              <span className="text-lg font-bold text-[var(--accent-cyan)]">
+                {formatCurrency(quarterBalance, true)}
+              </span>
+              <span className="text-[10px] text-[var(--text-muted)]">/</span>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase">All:</span>
+              <span className="text-sm text-[var(--text-secondary)]">
+                {formatCurrency(currentBalance, true)}
+              </span>
+            </>
+          ) : (
+            <span className="text-lg font-bold text-[var(--accent-cyan)]">
+              {formatCurrency(currentBalance, true)}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Day rows */}

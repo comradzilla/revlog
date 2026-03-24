@@ -574,6 +574,41 @@ export async function GET(request: Request) {
         );
         const currentBalance = parseFloat(balanceRes.rows[0].current_total);
 
+        // 1b. Quarter-scoped balance (deals with close_date in selected quarter)
+        let quarterBalance: number | null = null;
+        let quarterLabel: string | null = null;
+
+        if (quarters.length > 0) {
+          const qBalParams: (string | number | Date | string[])[] = [];
+          const qBalConditions: string[] = [
+            "stage_name NOT ILIKE '%closed%'",
+            "stage_name NOT ILIKE '%renewed%'",
+            "stage_name NOT ILIKE '%churn%'",
+            "pipeline IS NOT NULL",
+          ];
+          const qbpc = pipelineCondition(pipelineFilter, "pipeline", qBalParams);
+          if (qbpc) qBalConditions.push(qbpc);
+          const qbdtc = dealTypeCondition(dealTypeFilter, "deal_type", qBalParams);
+          if (qbdtc) qBalConditions.push(qbdtc);
+          const qbqc = quarterCondition(quarters, "close_date", qBalParams);
+          if (qbqc) qBalConditions.push(qbqc);
+
+          const qBalRes = await query(
+            `SELECT COALESCE(SUM(amount), 0)::numeric as quarter_total
+             FROM deals
+             WHERE ${qBalConditions.join(" AND ")}`,
+            qBalParams
+          );
+          quarterBalance = parseFloat(qBalRes.rows[0].quarter_total);
+
+          // Build quarter label from the quarter param
+          const qParam = searchParams.get("quarter") || "";
+          quarterLabel = qParam.split(",").map(q => {
+            const m = q.trim().match(/^(\d{4})-Q([1-4])$/);
+            return m ? `Q${m[2]} ${m[1]}` : q;
+          }).join(", ");
+        }
+
         // 2. Fetch all value-affecting changelog events
         const ledgerParams: (string | number | Date | string[])[] = [];
         const ledgerConditions: string[] = [];
@@ -727,7 +762,7 @@ export async function GET(request: Request) {
           return result;
         });
 
-        return Response.json({ currentBalance, days });
+        return Response.json({ currentBalance, quarterBalance, quarterLabel, days });
       }
 
       default:
