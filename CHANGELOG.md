@@ -4,6 +4,25 @@ Detailed version history for RevLog. Each entry documents what changed, why, and
 
 ---
 
+## v2.3.1 (2026-03-24) -- Quarter-Scoped Ledger
+
+**Theme:** Ledger now only shows transactions that impact the selected quarter's balance.
+
+### What Changed
+
+- Rewrote ledger SQL from single `changed_at` filter to UNION of 3 branches (close_date scoped)
+- Added close date move tracking: DATE IN / DATE OUT badges when deals enter/leave a quarter
+- Added "X out-of-quarter changes hidden" dismissable banner
+- NULLIF safety for empty closedate strings in `::timestamptz` casts
+- Every ledger row now moves the running balance (no more phantom deltas)
+
+### Files Modified
+- `src/app/api/hubspot/route.ts` — UNION query + closedate delta logic + hidden count
+- `src/components/PipelineLedger.tsx` — `hiddenCount` prop, banner, DATE_IN/DATE_OUT badges
+- `src/app/page.tsx` — Pass `hiddenCount` + update state type
+
+---
+
 ## v2.3 (2026-03-23) -- Pipeline Ledger + Filter-Aware Stats
 
 **Theme:** Bank-statement view of pipeline value over time, multi-select pipeline filters, and filter-responsive stats cards.

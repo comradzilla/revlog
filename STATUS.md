@@ -2,7 +2,7 @@
 
 **Read this first when starting a new session.** This is the source of truth for where the project stands, what is done, what is next, and every nuance you need to know.
 
-Last updated: 2026-03-23
+Last updated: 2026-03-24
 
 ---
 
@@ -29,6 +29,9 @@ Last updated: 2026-03-23
 ### Core Dashboard
 - [x] Changelog feed with date grouping, 200 entries max
 - [x] Pipeline Ledger — bank-statement view switchable from Changelog header dropdown
+- [x] Quarter-scoped ledger — only shows transactions that impact the selected quarter's balance (UNION 3-branch SQL)
+- [x] Close date move tracking — DATE IN / DATE OUT badges when deals enter/leave a quarter
+- [x] Hidden count banner — "X out-of-quarter changes hidden" (dismissable)
 - [x] 5 stat cards: Open Pipeline (filtered/all split), Changes Today, Changes (7d), Closed Won, Closed Lost
 - [x] Open Pipeline card shows filtered value + global total as context
 - [x] Win rate and average deal size on Closed Won card

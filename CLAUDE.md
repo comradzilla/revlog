@@ -101,12 +101,19 @@ Self-scheduling via `src/instrumentation.ts` — no external cron needed. HubSpo
 
 - Switchable view via dropdown on the "CHANGELOG" header (Changelog ↔ Pipeline Ledger)
 - Flat bank-statement layout: each transaction = one row with date, type badge, deal name, delta, running balance
-- **Balance events tracked**: amount changes, deal created, closed won/lost (NOT stage moves)
+- **Quarter-scoped transactions**: When a quarter is selected, only shows transactions that impact that quarter's balance (UNION 3-branch SQL):
+  - Branch A: amount/created/stage changes on deals with `close_date` IN the quarter
+  - Branch B: close date moved INTO the quarter (DATE IN badge, +$amount)
+  - Branch C: close date moved OUT OF the quarter (DATE OUT badge, -$amount)
+- **Hidden count banner**: Shows "X out-of-quarter changes hidden" (dismissable) for changes that happened but don't affect the quarter
+- **Balance events tracked**: amount changes, deal created, closed won/lost, close date moves (NOT stage moves)
 - **Running balance**: anchored to `quarterBalance` when quarter selected, otherwise `currentBalance`
-- **Quarter-scoped balance**: queries `deals.close_date` within selected quarter(s) — shows pipeline expected to close in that quarter
+- **Quarter-scoped balance**: queries `deals.close_date` within selected quarter(s)
 - **Dual header**: "Q1 2026: $989K / All: $16.3M" when quarter active
-- **API endpoint**: `?type=pipeline-ledger` — returns flat `transactions[]` with pre-computed `balance` per row
-- **Created deal delta bug fix**: `new_value` for created events is a stage ID, not an amount — extract from `new_label` regex match or fall back to `deals.amount`
+- **API endpoint**: `?type=pipeline-ledger` — returns flat `transactions[]` with pre-computed `balance` per row + `hiddenCount`
+- **NULLIF safety**: `closedate` old/new values use `NULLIF(val, '')::timestamptz` to avoid casting empty strings
+- **Created deal delta**: `new_value` is a stage ID, not an amount — extract from `new_label` regex or fall back to `deals.amount`
+- **No quarter selected**: Falls back to original `changed_at` filter, skips close date branches and hidden count
 - Mobile: short date format (`3-23-26` via `timestampShort`), full format on desktop (`Mar 23, 3:56 PM`)
 
 ## Multi-Select Pipeline Filter
