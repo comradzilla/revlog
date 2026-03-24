@@ -4,6 +4,49 @@ Detailed version history for RevLog. Each entry documents what changed, why, and
 
 ---
 
+## v2.3 (2026-03-23) -- Pipeline Ledger + Filter-Aware Stats
+
+**Theme:** Bank-statement view of pipeline value over time, multi-select pipeline filters, and filter-responsive stats cards.
+
+### What Changed
+
+**Pipeline Ledger:**
+- New "Pipeline Ledger" view alongside Changelog — switchable via dropdown on the CHANGELOG header
+- Flat bank-statement layout: each transaction shows date, type badge, deal name, delta (+/-), running balance
+- Running balance anchored to quarter-scoped pipeline when quarter filter is active
+- Tracks amount changes, deal creation, closed won/lost exits (not stage moves — no dollar impact)
+- Dual balance header: "Q1 2026: $989K / All: $16.3M"
+- Mobile: compact date format (3-23-26), single-line rows at 375px
+
+**Multi-Select Pipeline Filter:**
+- Pipeline filter converted from single-select to multi-select (toggle like quarters)
+- "ALL" button clears selection, individual pipelines toggle on/off
+- API supports comma-separated pipeline IDs with `= ANY()` SQL matching
+
+**Filter-Aware Stats:**
+- Open Pipeline card shows filtered value when filters active: "$989K" + "6 deals · all: $16.3M"
+- Pipeline-value API endpoint now accepts quarter, pipeline, dealType filters
+- Returns both global and filtered totals
+
+**Mobile Fixes:**
+- Changelog rows: overflow-hidden + min-w-0 on Line 2, card padding reduced to p-3
+- StatusBar header: padding/gaps tightened, dividers hidden on mobile
+
+### Files Created
+
+- `src/components/PipelineLedger.tsx` -- Flat ledger component with running balance
+
+### Files Modified
+
+- `src/app/api/hubspot/route.ts` -- pipeline-ledger endpoint, pipelineCondition() helper, filter-aware pipeline-value
+- `src/app/page.tsx` -- View toggle state/dropdown, ledger fetch, multi-select pipeline state, filtered stats
+- `src/components/StatsCards.tsx` -- Filtered/all split on Open Pipeline card
+- `src/components/ChangelogFeed.tsx` -- Mobile overflow fixes
+- `src/components/StatusBar.tsx` -- Mobile responsive header
+- `src/components/MobileFilterDrawer.tsx` -- Multi-select pipeline buttons, hide change type in ledger view
+
+---
+
 ## v2.2 (2026-03-23) -- Authentication + Mobile Log Mode
 
 **Theme:** Secure the dashboard with password auth and make it usable on mobile with a changelog-first "log mode" layout.

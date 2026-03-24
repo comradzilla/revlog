@@ -21,7 +21,7 @@ src/
 │   │   │   ├── login/route.ts    # POST: validate password, set session cookie
 │   │   │   └── logout/route.ts   # POST: clear session cookie
 │   │   ├── cron/route.ts         # Cron endpoint (?tier=incremental|full)
-│   │   ├── hubspot/route.ts      # All 16 read endpoints (reads from Postgres)
+│   │   ├── hubspot/route.ts      # All 17 read endpoints (reads from Postgres, incl. pipeline-ledger)
 │   │   └── sync/route.ts         # Manual sync trigger (POST)
 │   ├── login/page.tsx            # Terminal-styled password login page
 │   ├── page.tsx                  # Main dashboard ("use client", 12+ parallel fetches)
@@ -30,6 +30,7 @@ src/
 │   └── layout.tsx                # Root layout (Geist fonts)
 ├── components/
 │   ├── ChangelogFeed.tsx         # Console-log style changelog (5 property types, mobile 2-line rows)
+│   ├── PipelineLedger.tsx        # Bank-statement view with running balance (flat list, quarter-scoped)
 │   ├── MobileFilterDrawer.tsx    # Slide-up filter drawer (sm:hidden)
 │   ├── MobileStatsSummary.tsx    # Compact single-line stats bar (sm:hidden)
 │   ├── MobileSidebarTabs.tsx     # Tabbed Funnels/Stale/Recent (lg:hidden)
@@ -95,6 +96,33 @@ Self-scheduling via `src/instrumentation.ts` — no external cron needed. HubSpo
 - ChangelogFeed rows: `flex flex-col sm:flex-row` — two lines on mobile, one line on desktop
 - MobileFilterDrawer rendered at root level (outside `<main>`) for fixed positioning
 - Desktop layout is completely unchanged — mobile components are additive with responsive hiding
+
+## Pipeline Ledger
+
+- Switchable view via dropdown on the "CHANGELOG" header (Changelog ↔ Pipeline Ledger)
+- Flat bank-statement layout: each transaction = one row with date, type badge, deal name, delta, running balance
+- **Balance events tracked**: amount changes, deal created, closed won/lost (NOT stage moves)
+- **Running balance**: anchored to `quarterBalance` when quarter selected, otherwise `currentBalance`
+- **Quarter-scoped balance**: queries `deals.close_date` within selected quarter(s) — shows pipeline expected to close in that quarter
+- **Dual header**: "Q1 2026: $989K / All: $16.3M" when quarter active
+- **API endpoint**: `?type=pipeline-ledger` — returns flat `transactions[]` with pre-computed `balance` per row
+- **Created deal delta bug fix**: `new_value` for created events is a stage ID, not an amount — extract from `new_label` regex match or fall back to `deals.amount`
+- Mobile: short date format (`3-23-26` via `timestampShort`), full format on desktop (`Mar 23, 3:56 PM`)
+
+## Multi-Select Pipeline Filter
+
+- `pipelineFilter` state is `string[]` (empty = all pipelines)
+- URL param: `&pipeline=ID1,ID2,ID3` (comma-separated)
+- API: `pipelineCondition()` helper splits comma values, uses `= ANY($X)` for arrays, `= $X` for single
+- "ALL" button clears the array, individual pipelines toggle on/off
+
+## Filter-Aware Stats
+
+- Open Pipeline card shows filtered value when any filter is active
+- `?type=pipeline-value` endpoint accepts `pipeline`, `dealType`, `quarter` params
+- Returns `{ totalValue, count, filteredValue, filteredCount }` — global + filtered
+- Quarter filter applied to `close_date` column (not `changed_at`)
+- Card subtitle: "{count} deals · all: ${global}" when filtered
 
 ## Key Behaviors & Gotchas
 

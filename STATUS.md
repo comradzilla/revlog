@@ -11,7 +11,7 @@ Last updated: 2026-03-23
 | Item | Value |
 |------|-------|
 | Branch | `v2-pipeline-intelligence` (not merged to main yet) |
-| Last version | v2.2 |
+| Last version | v2.3 |
 | Build | Passing (`npm run build` succeeds) |
 | Database | ~3,022 deals, 5 pipelines, ~57 stage label mappings |
 | HubSpot Hub ID | 3282655 |
@@ -28,9 +28,12 @@ Last updated: 2026-03-23
 
 ### Core Dashboard
 - [x] Changelog feed with date grouping, 200 entries max
-- [x] 5 stat cards: Open Pipeline, Changes Today, Changes (7d), Closed Won, Closed Lost
+- [x] Pipeline Ledger — bank-statement view switchable from Changelog header dropdown
+- [x] 5 stat cards: Open Pipeline (filtered/all split), Changes Today, Changes (7d), Closed Won, Closed Lost
+- [x] Open Pipeline card shows filtered value + global total as context
 - [x] Win rate and average deal size on Closed Won card
-- [x] Weighted pipeline value on Open Pipeline card
+- [x] Weighted pipeline value on Open Pipeline card (when no filters active)
+- [x] Multi-select pipeline filter (toggle individual pipelines like quarters)
 - [x] Growth Pipeline funnel card
 - [x] Renewal Pipeline funnel card
 - [x] Upsell pipeline card with inline pipeline toggle

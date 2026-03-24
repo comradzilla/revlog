@@ -12,6 +12,23 @@ interface Update {
 
 const UPDATES: Update[] = [
   {
+    version: "2.3",
+    date: "2026-03-23",
+    title: "Pipeline Ledger + Smart Filters",
+    description:
+      "Bank-statement view of pipeline value over time, multi-select pipeline filters, and filter-responsive stats cards.",
+    changes: [
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Pipeline Ledger — flat bank-statement view showing every value-affecting transaction with running balance" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "View toggle dropdown on Changelog header — switch between Changelog and Pipeline Ledger" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Quarter-scoped balance — ledger tracks Q1 pipeline ($989K) separately from all-time ($16.3M)" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Multi-select pipeline filter — toggle Growth + Renewal together, like quarter multi-select" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Open Pipeline card shows filtered value + global total as context" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "Pipeline-value API now accepts quarter, pipeline, and dealType filters" },
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Mobile changelog overflow — rows no longer spill past screen edge" },
+      { tag: "FIX", tagColor: "var(--accent-orange)", text: "Mobile header overflow — tightened padding, hidden dividers on small screens" },
+    ],
+  },
+  {
     version: "2.2",
     date: "2026-03-23",
     title: "Authentication + Mobile Log Mode",
