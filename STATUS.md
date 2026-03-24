@@ -48,7 +48,9 @@ Last updated: 2026-03-24
 ### Intelligence Features
 - [x] Stage regression detection (REGR badge, red border)
 - [x] Close date slip detection (SLIP badge, orange border)
-- [x] Stale deal detection (30+ days, sorted by dollar value)
+- [x] Stale deal detection (30+ days in stage + next step stale 14+ days, sorted by dollar value)
+- [x] Stale deals respect pipeline and deal type filters
+- [x] Stale deals `?` tooltip explaining the definition
 - [x] Time-in-stage badges (green <14d, amber 14-30d, red 30d+)
 - [x] Deal creation events tracked and displayed
 - [x] Owner name on every changelog entry
@@ -106,6 +108,14 @@ Last updated: 2026-03-24
 - [x] Pipeline funnel sidebar (Growth/Renewal/Upsell): quarter-scoped via `close_date` filter
 - [x] Stale deals: fallback to `created_at` when no changelog entries (fixes 999-day bug)
 - [x] Playwright UI/UX audit: 67 passing tests across 11 suites (on `playwright-ui-audit` branch)
+
+### v2.3.3 Stale Deals Improvements
+- [x] Stale definition: time-in-stage (30+ days) + next step stale (14+ days no `hs_next_step` update)
+- [x] `?` tooltip bubble explaining stale deal criteria
+- [x] Stale deals respect pipeline and deal type filters (filter-driven, no tabs)
+- [x] Increased limit from 20 to 50 deals, show-more threshold from 5 to 10
+- [x] Syncs `hs_next_step` property from HubSpot, stores in `deals.next_step` column
+- [x] DB migration: `stage_entered_at` + `next_step` columns on `deals` table
 
 ---
 
