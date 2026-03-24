@@ -8,6 +8,7 @@ interface LedgerTransaction {
   delta: number;
   description: string;
   timestamp: string;
+  timestampShort: string;
   balance: number;
 }
 
@@ -100,12 +101,13 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
               href={`https://app.hubspot.com/contacts/3282655/record/0-3/${txn.dealId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group"
+              className="flex items-center gap-1.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group"
             >
               {/* Line 1: timestamp + type badge + deal name */}
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[var(--text-muted)] shrink-0 w-[100px] sm:w-[120px] text-right text-[10px] sm:text-xs whitespace-nowrap">
-                  {txn.timestamp}
+                <span className="text-[var(--text-muted)] shrink-0 text-right text-[10px] sm:text-xs whitespace-nowrap">
+                  <span className="sm:hidden">{txn.timestampShort}</span>
+                  <span className="hidden sm:inline">{txn.timestamp}</span>
                 </span>
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold shrink-0"
@@ -123,7 +125,7 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
               </div>
 
               {/* Line 2 (mobile) / inline (desktop): description + delta + balance */}
-              <div className="flex items-center gap-2 sm:ml-auto pl-[104px] sm:pl-0 min-w-0 overflow-hidden whitespace-nowrap">
+              <div className="flex items-center gap-2 ml-auto min-w-0 overflow-hidden whitespace-nowrap shrink-0">
                 {txn.description && (
                   <span className="text-[var(--text-muted)] text-[10px] truncate hidden sm:inline">
                     {txn.description}

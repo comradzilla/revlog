@@ -659,6 +659,7 @@ export async function GET(request: Request) {
           delta: number;
           description: string;
           timestamp: string;
+          timestampShort: string;
           balance: number;
         }[] = [];
 
@@ -715,6 +716,7 @@ export async function GET(request: Request) {
             month: "short",
             day: "numeric",
           }) + ", " + dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+          const timestampShort = `${dt.getMonth() + 1}-${dt.getDate()}-${String(dt.getFullYear()).slice(2)}`;
 
           transactions.push({
             dealId: r.deal_id,
@@ -724,6 +726,7 @@ export async function GET(request: Request) {
             delta,
             description,
             timestamp,
+            timestampShort,
             balance: 0, // computed below
           });
         }

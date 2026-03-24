@@ -150,7 +150,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
-  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; balance: number }[] } | null>(null);
+  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; timestampShort: string; balance: number }[] } | null>(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   const activeRequest = useRef(0);
