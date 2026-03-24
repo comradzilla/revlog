@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 interface LedgerTransaction {
   dealId: string;
   dealName: string;
@@ -17,6 +19,7 @@ interface PipelineLedgerProps {
   quarterBalance?: number | null;
   quarterLabel?: string | null;
   transactions: LedgerTransaction[];
+  hiddenCount?: number;
 }
 
 function formatCurrency(value: number, compact = false): string {
@@ -51,13 +54,27 @@ const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   closed_won: { label: "WON", color: "var(--accent-green)" },
   closed_lost: { label: "LOST", color: "var(--accent-red)" },
   reopened: { label: "REOPENED", color: "var(--accent-blue)" },
+  date_moved_in: { label: "DATE IN", color: "var(--accent-green)" },
+  date_moved_out: { label: "DATE OUT", color: "var(--accent-red)" },
 };
 
-export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, transactions }: PipelineLedgerProps) {
+export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, transactions, hiddenCount = 0 }: PipelineLedgerProps) {
+  const [hiddenDismissed, setHiddenDismissed] = useState(false);
+
+  // Reset dismissal when hidden count changes (e.g., filter change)
+  useEffect(() => {
+    setHiddenDismissed(false);
+  }, [hiddenCount]);
+
   if (transactions.length === 0) {
     return (
       <div className="font-mono text-xs text-[var(--text-muted)] py-8 text-center">
         No pipeline value changes found for this period.
+        {hiddenCount > 0 && (
+          <div className="mt-2 text-[var(--text-muted)]">
+            {hiddenCount} out-of-quarter change{hiddenCount !== 1 ? "s" : ""} not shown
+          </div>
+        )}
       </div>
     );
   }
@@ -89,6 +106,19 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
           )}
         </div>
       </div>
+
+      {/* Hidden out-of-quarter changes banner */}
+      {hiddenCount > 0 && !hiddenDismissed && (
+        <div className="flex items-center justify-between px-2 py-1.5 mb-3 rounded bg-[var(--bg-card-hover)] border border-[var(--border-color)] font-mono text-[10px] text-[var(--text-muted)]">
+          <span>{hiddenCount} out-of-quarter change{hiddenCount !== 1 ? "s" : ""} hidden</span>
+          <button
+            onClick={() => setHiddenDismissed(true)}
+            className="text-[var(--text-muted)] hover:text-[var(--text-secondary)] ml-2 shrink-0 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Transaction list */}
       <div className="space-y-0">

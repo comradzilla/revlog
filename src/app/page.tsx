@@ -150,7 +150,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
-  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; timestampShort: string; balance: number }[] } | null>(null);
+  const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; timestampShort: string; balance: number }[]; hiddenCount: number } | null>(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   const activeRequest = useRef(0);
@@ -592,7 +592,7 @@ export default function Dashboard() {
                 )
               ) : (
                 ledgerData ? (
-                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} transactions={ledgerData.transactions} />
+                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} transactions={ledgerData.transactions} hiddenCount={ledgerData.hiddenCount} />
                 ) : (
                   <div className="space-y-3 py-4">
                     {[...Array(6)].map((_, i) => (

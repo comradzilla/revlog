@@ -640,16 +640,14 @@ export async function GET(request: Request) {
           }).join(", ");
         }
 
-        // 2. Fetch all value-affecting changelog events
-        const ledgerParams: (string | number | Date | string[])[] = [];
-        const ledgerConditions: string[] = [];
+        // 2. Fetch quarter-impacting changelog events
+        // When a quarter is selected, use UNION of 3 branches:
+        //   A: amount/created/stage changes on deals with close_date IN the quarter
+        //   B: close date moved INTO the quarter
+        //   C: close date moved OUT OF the quarter
+        // When no quarter selected, fall back to filtering on cl.changed_at
 
-        // Only value-affecting events:
-        // - amount changes
-        // - deal created (enters pipeline with value)
-        // - stage change TO a closed stage (exits pipeline)
-        // - stage change FROM a closed stage (re-enters pipeline)
-        ledgerConditions.push(`(
+        const valueEventFilter = `(
           cl.property = 'amount'
           OR cl.property = 'created'
           OR (cl.property = 'dealstage' AND (
@@ -658,26 +656,99 @@ export async function GET(request: Request) {
             OR cl.old_label ILIKE '%closed won%' OR cl.old_label ILIKE '%closed lost%'
             OR cl.old_label ILIKE '%renewed%' OR cl.old_label ILIKE '%churn%'
           ))
-        )`);
+        )`;
 
-        const lqc = quarterCondition(quarters, "cl.changed_at", ledgerParams);
-        if (lqc) ledgerConditions.push(lqc);
-
-        const lpc = pipelineCondition(pipelineFilter, "cl.pipeline", ledgerParams);
-        if (lpc) ledgerConditions.push(lpc);
-
-        const ldtc = dealTypeCondition(dealTypeFilter, "d.deal_type", ledgerParams);
-        if (ldtc) ledgerConditions.push(ldtc);
-
-        const ledgerSql = `
-          SELECT cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name,
+        const selectCols = `cl.deal_id, cl.deal_name, cl.pipeline, cl.pipeline_name,
                  cl.property, cl.old_value, cl.new_value, cl.old_label, cl.new_label,
-                 cl.changed_at, d.amount as current_amount
-          FROM deal_changelog cl
-          LEFT JOIN deals d ON d.id = cl.deal_id
-          WHERE ${ledgerConditions.join(" AND ")}
-          ORDER BY cl.changed_at DESC
-          LIMIT 500`;
+                 cl.changed_at, d.amount as current_amount`;
+        const joinClause = `FROM deal_changelog cl LEFT JOIN deals d ON d.id = cl.deal_id`;
+
+        let ledgerSql: string;
+        let ledgerParams: (string | number | Date | string[])[] = [];
+        let hiddenCount = 0;
+
+        if (quarters.length > 0) {
+          // Build shared pipeline + dealType filter fragments
+          const sharedParams: (string | number | Date | string[])[] = [];
+          const pFrag = pipelineCondition(pipelineFilter, "cl.pipeline", sharedParams);
+          const dtFrag = dealTypeCondition(dealTypeFilter, "d.deal_type", sharedParams);
+          const sharedWhere = [pFrag, dtFrag].filter(Boolean).join(" AND ");
+          const sharedAnd = sharedWhere ? ` AND ${sharedWhere}` : "";
+
+          // Quarter date ranges for parameterized queries
+          // For simplicity with UNION, we build the quarter checks inline
+          const qRanges = quarters.map(q => ({
+            start: q.start.toISOString(),
+            end: q.end.toISOString(),
+          }));
+
+          // Build quarter condition on a column using parameterized values
+          const paramOffset = sharedParams.length;
+          const qParams: string[] = [];
+          const qCondParts: string[] = [];
+          for (let qi = 0; qi < qRanges.length; qi++) {
+            const startIdx = paramOffset + qi * 2 + 1;
+            const endIdx = paramOffset + qi * 2 + 2;
+            qParams.push(qRanges[qi].start, qRanges[qi].end);
+            qCondParts.push(`(__COL__ >= $${startIdx} AND __COL__ < $${endIdx})`);
+          }
+          const qCondTemplate = qCondParts.length === 1 ? qCondParts[0] : `(${qCondParts.join(" OR ")})`;
+          const notQCondTemplate = qCondParts.length === 1
+            ? `(__COL__ < $${paramOffset + 1} OR __COL__ >= $${paramOffset + 2})`
+            : `NOT ${qCondTemplate}`;
+
+          // Replace __COL__ placeholder for each branch
+          const closeDateInQ = qCondTemplate.replace(/__COL__/g, "d.close_date");
+          const changedAtInQ = qCondTemplate.replace(/__COL__/g, "cl.changed_at");
+          // Use NULLIF to safely handle empty strings before timestamptz cast
+          const safeNewValue = "NULLIF(cl.new_value, '')::timestamptz";
+          const safeOldValue = "NULLIF(cl.old_value, '')::timestamptz";
+          const newValueInQ = qCondTemplate.replace(/__COL__/g, safeNewValue);
+          const oldValueInQ = qCondTemplate.replace(/__COL__/g, safeOldValue);
+          const newValueNotInQ = notQCondTemplate.replace(/__COL__/g, safeNewValue);
+          const oldValueNotInQ = notQCondTemplate.replace(/__COL__/g, safeOldValue);
+          const closeDateNotInQ = notQCondTemplate.replace(/__COL__/g, "d.close_date");
+
+          ledgerParams = [...sharedParams, ...qParams];
+
+          // Branch A: value events on deals with close_date in quarter
+          const branchA = `SELECT ${selectCols} ${joinClause}
+            WHERE ${valueEventFilter} AND ${closeDateInQ}${sharedAnd}`;
+
+          // Branch B: close date moved INTO the quarter
+          const branchB = `SELECT ${selectCols} ${joinClause}
+            WHERE cl.property = 'closedate'
+            AND ${newValueInQ}
+            AND (cl.old_value IS NULL OR cl.old_value = '' OR ${oldValueNotInQ})${sharedAnd}`;
+
+          // Branch C: close date moved OUT OF the quarter
+          const branchC = `SELECT ${selectCols} ${joinClause}
+            WHERE cl.property = 'closedate'
+            AND ${oldValueInQ}
+            AND (cl.new_value IS NULL OR cl.new_value = '' OR ${newValueNotInQ})${sharedAnd}`;
+
+          ledgerSql = `(${branchA}) UNION ALL (${branchB}) UNION ALL (${branchC})
+            ORDER BY changed_at DESC LIMIT 500`;
+
+          // Hidden count: changes that happened during the quarter on deals closing outside it
+          const hiddenSql = `SELECT COUNT(*)::integer as cnt ${joinClause}
+            WHERE ${valueEventFilter} AND ${changedAtInQ}
+            AND (d.close_date IS NULL OR ${closeDateNotInQ})${sharedAnd}`;
+
+          const hiddenResult = await query(hiddenSql, ledgerParams);
+          hiddenCount = hiddenResult.rows[0]?.cnt || 0;
+        } else {
+          // No quarter selected — use original behavior (filter on changed_at)
+          const ledgerConditions: string[] = [valueEventFilter];
+          const lpc = pipelineCondition(pipelineFilter, "cl.pipeline", ledgerParams);
+          if (lpc) ledgerConditions.push(lpc);
+          const ldtc = dealTypeCondition(dealTypeFilter, "d.deal_type", ledgerParams);
+          if (ldtc) ledgerConditions.push(ldtc);
+
+          ledgerSql = `SELECT ${selectCols} ${joinClause}
+            WHERE ${ledgerConditions.join(" AND ")}
+            ORDER BY cl.changed_at DESC LIMIT 500`;
+        }
 
         const ledgerResult = await query(ledgerSql, ledgerParams);
 
@@ -740,6 +811,25 @@ export async function GET(request: Request) {
               // Both old and new are closed — no net pipeline impact
               continue;
             }
+          } else if (r.property === "closedate") {
+            // Close date moved into or out of the selected quarter
+            const amt = parseFloat(r.current_amount) || 0;
+            const newDate = r.new_value ? new Date(r.new_value) : null;
+            const oldDate = r.old_value ? new Date(r.old_value) : null;
+            const newInQ = newDate && quarters.some(q => newDate >= q.start && newDate < q.end);
+            const oldInQ = oldDate && quarters.some(q => oldDate >= q.start && oldDate < q.end);
+
+            if (newInQ && !oldInQ) {
+              delta = amt;
+              type = "date_moved_in";
+              description = `Close date → ${r.new_label || r.new_value} (entered quarter)`;
+            } else if (oldInQ && !newInQ) {
+              delta = -amt;
+              type = "date_moved_out";
+              description = `Close date ${r.old_label || r.old_value} → ${r.new_label || r.new_value} (left quarter)`;
+            } else {
+              continue; // Both in or both out — shouldn't happen due to UNION logic
+            }
           }
 
           const dt = new Date(r.changed_at);
@@ -771,7 +861,7 @@ export async function GET(request: Request) {
           runningBalance -= transactions[i].delta;
         }
 
-        return Response.json({ currentBalance, quarterBalance, quarterLabel, transactions });
+        return Response.json({ currentBalance, quarterBalance, quarterLabel, transactions, hiddenCount });
       }
 
       default:
