@@ -13,6 +13,7 @@ import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
 import { MobileStatsSummary } from "@/components/MobileStatsSummary";
 import { MobileSidebarTabs } from "@/components/MobileSidebarTabs";
 import { PipelineLedger } from "@/components/PipelineLedger";
+import { LivelineCharts } from "@/components/LivelineCharts";
 
 interface ChangelogEntry {
   dealId: string;
@@ -154,6 +155,15 @@ export default function Dashboard() {
   const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
   const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; timestampShort: string; balance: number }[]; hiddenCount: number } | null>(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+  const [statsView, setStatsView] = useState<"cards" | "charts">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("revradar-stats-view") as "cards" | "charts") || "cards";
+    }
+    return "cards";
+  });
+  const [wowData, setWowData] = useState<{ thisWeek: { day: string; value: number }[]; lastWeek: { day: string; value: number }[]; thisWeekTotal: number; lastWeekTotal: number; wow: number } | null>(null);
+  const [bookingsData, setBookingsData] = useState<{ daily: { day: string; value: number }[]; cumulative: { day: string; value: number }[]; total: number } | null>(null);
+  const [netMovementTrend, setNetMovementTrend] = useState<{ days: { day: string; created: number; won: number; lost: number; net: number }[] } | null>(null);
 
   const activeRequest = useRef(0);
 
@@ -290,11 +300,14 @@ export default function Dashboard() {
         setIsLoading(false);
       }
 
-      // Fetch changelog, ledger, and sync metadata separately
-      const [changelogRes, syncMetaRes, ledgerRes] = await Promise.all([
+      // Fetch changelog, ledger, charts, and sync metadata separately
+      const [changelogRes, syncMetaRes, ledgerRes, wowRes, bookingsRes, netTrendRes] = await Promise.all([
         fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`),
         fetch("/api/hubspot?type=sync-status"),
         fetch(`/api/hubspot?type=pipeline-ledger${qParam}${pParam}${dtParam}`),
+        fetch(`/api/hubspot?type=pipeline-created-wow${pParam}${dtParam}`),
+        fetch(`/api/hubspot?type=bookings-trend${qParam}${pParam}${dtParam}`),
+        fetch(`/api/hubspot?type=net-movement-trend${qParam}${pParam}${dtParam}`),
       ]);
       if (changelogRes.ok && !isStale()) {
         const d = await changelogRes.json();
@@ -303,6 +316,18 @@ export default function Dashboard() {
       if (ledgerRes.ok && !isStale()) {
         const d = await ledgerRes.json();
         if (!isStale()) setLedgerData(d);
+      }
+      if (wowRes.ok && !isStale()) {
+        const d = await wowRes.json();
+        if (!isStale()) setWowData(d);
+      }
+      if (bookingsRes.ok && !isStale()) {
+        const d = await bookingsRes.json();
+        if (!isStale()) setBookingsData(d);
+      }
+      if (netTrendRes.ok && !isStale()) {
+        const d = await netTrendRes.json();
+        if (!isStale()) setNetMovementTrend(d);
       }
       if (syncMetaRes.ok && !isStale()) {
         const d = await syncMetaRes.json();
@@ -481,9 +506,33 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Stats row (hidden on mobile — MobileStatsSummary shown above) */}
+        {/* Stats / Charts row with flip toggle (hidden on mobile — MobileStatsSummary shown above) */}
         <div className="hidden sm:block">
-          <StatsCards stats={stats} />
+          <div className="relative">
+            {/* Toggle button */}
+            <button
+              onClick={() => {
+                const next = statsView === "cards" ? "charts" : "cards";
+                setStatsView(next);
+                localStorage.setItem("revradar-stats-view", next);
+              }}
+              className="absolute -top-1 right-0 z-10 font-mono text-[10px] px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--text-secondary)] transition-colors cursor-pointer"
+              title={statsView === "cards" ? "Switch to charts" : "Switch to cards"}
+            >
+              {statsView === "cards" ? "📊 charts" : "📋 cards"}
+            </button>
+
+            {statsView === "cards" ? (
+              <StatsCards stats={stats} />
+            ) : (
+              <LivelineCharts
+                wowData={wowData}
+                bookingsData={bookingsData}
+                netMovementData={netMovementTrend}
+                theme={typeof document !== "undefined" ? document.documentElement.getAttribute("data-theme") || "terminal" : "terminal"}
+              />
+            )}
+          </div>
         </div>
 
         {/* Net movement bar (hidden on mobile) */}
