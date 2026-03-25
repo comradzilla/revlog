@@ -2,13 +2,13 @@
 
 import { useMemo } from "react";
 import { Liveline } from "liveline";
+import type { CandlePoint } from "liveline";
 
-interface WowData {
-  thisWeek: { day: string; value: number }[];
-  lastWeek: { day: string; value: number }[];
-  thisWeekTotal: number;
-  lastWeekTotal: number;
-  wow: number;
+interface PipelineCreatedData {
+  daily: { day: string; value: number; count: number }[];
+  cumulative: { day: string; value: number }[];
+  total: number;
+  dealCount: number;
 }
 
 interface BookingsData {
@@ -18,7 +18,11 @@ interface BookingsData {
 }
 
 interface NetMovementData {
-  days: { day: string; created: number; won: number; lost: number; net: number }[];
+  candles: { day: string; time: number; open: number; high: number; low: number; close: number; net: number }[];
+  lineData: { time: number; value: number }[];
+  currentValue: number;
+  startValue: number;
+  netChange: number;
 }
 
 function formatCompact(v: number): string {
@@ -33,38 +37,23 @@ function dayToUnix(day: string): number {
 }
 
 export function LivelineCharts({
-  wowData,
+  pipelineCreatedData,
   bookingsData,
   netMovementData,
   theme,
 }: {
-  wowData: WowData | null;
+  pipelineCreatedData: PipelineCreatedData | null;
   bookingsData: BookingsData | null;
   netMovementData: NetMovementData | null;
   theme: string;
 }) {
   const livelineTheme = theme === "light" ? "light" : "dark";
 
-  // Pipeline Created WoW — multi-series
-  const wowSeries = useMemo(() => {
-    if (!wowData) return null;
-    return [
-      {
-        id: "thisWeek",
-        data: wowData.thisWeek.map((d) => ({ time: dayToUnix(d.day), value: d.value })),
-        value: wowData.thisWeekTotal,
-        color: "#10b981",
-        label: "This Week",
-      },
-      {
-        id: "lastWeek",
-        data: wowData.lastWeek.map((d) => ({ time: dayToUnix(d.day), value: d.value })),
-        value: wowData.lastWeekTotal,
-        color: "#6b7280",
-        label: "Last Week",
-      },
-    ];
-  }, [wowData]);
+  // Pipeline Created — cumulative line over the quarter
+  const createdPoints = useMemo(() => {
+    if (!pipelineCreatedData?.cumulative?.length) return null;
+    return pipelineCreatedData.cumulative.map((d) => ({ time: dayToUnix(d.day), value: d.value }));
+  }, [pipelineCreatedData]);
 
   // Bookings — cumulative single line
   const bookingsPoints = useMemo(() => {
@@ -72,52 +61,53 @@ export function LivelineCharts({
     return bookingsData.cumulative.map((d) => ({ time: dayToUnix(d.day), value: d.value }));
   }, [bookingsData]);
 
-  // Net Movement — single line
-  const netPoints = useMemo(() => {
-    if (!netMovementData?.days?.length) return null;
-    return netMovementData.days.map((d) => ({ time: dayToUnix(d.day), value: d.net }));
+  // Net Movement — candlestick data
+  const candleData = useMemo(() => {
+    if (!netMovementData?.candles?.length) return null;
+    return netMovementData.candles.map((c): CandlePoint => ({
+      time: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
   }, [netMovementData]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* Pipeline Created WoW */}
+      {/* Pipeline Created — Quarter View */}
       <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-            Pipeline Created WoW
+            Pipeline Created
           </h3>
-          {wowData && (
+          {pipelineCreatedData && (
             <span className="font-mono text-[10px] font-semibold">
-              <span className="text-[var(--accent-green)]">{formatCompact(wowData.thisWeekTotal)}</span>
-              {wowData.wow !== 0 && (
-                <span className={`ml-1 ${wowData.wow > 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"}`}>
-                  {wowData.wow > 0 ? "↑" : "↓"}{Math.abs(wowData.wow).toFixed(0)}%
-                </span>
-              )}
+              <span className="text-[var(--accent-green)]">{formatCompact(pipelineCreatedData.total)}</span>
+              <span className="text-[var(--text-muted)] ml-1">({pipelineCreatedData.dealCount} deals)</span>
             </span>
           )}
         </div>
         <div style={{ height: 120, width: "100%" }}>
-          {wowSeries && wowSeries[0].data.length > 0 ? (
+          {createdPoints && createdPoints.length > 1 ? (
             <Liveline
-              data={wowSeries[0].data}
-              value={wowSeries[0].value}
-              series={wowSeries}
+              data={createdPoints}
+              value={pipelineCreatedData?.total ?? 0}
               color="#10b981"
               theme={livelineTheme}
-              window={86400 * 8}
+              window={86400 * 95}
               fill={true}
               grid={true}
               badge={false}
               showValue={false}
-              momentum={false}
+              momentum={true}
               scrub={true}
               formatValue={(v: number) => formatCompact(v)}
-              formatTime={(t: number) => new Date(t * 1000).toLocaleDateString("en-US", { weekday: "short" })}
+              formatTime={(t: number) => new Date(t * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             />
           ) : (
             <div className="h-full flex items-center justify-center font-mono text-[10px] text-[var(--text-muted)]">
-              No data this week
+              {createdPoints?.length === 1 ? `${formatCompact(pipelineCreatedData?.total ?? 0)} on one day` : "No pipeline created"}
             </div>
           )}
         </div>
@@ -136,7 +126,7 @@ export function LivelineCharts({
           )}
         </div>
         <div style={{ height: 120, width: "100%" }}>
-          {bookingsPoints && bookingsPoints.length > 0 ? (
+          {bookingsPoints && bookingsPoints.length > 1 ? (
             <Liveline
               data={bookingsPoints}
               value={bookingsData?.total ?? 0}
@@ -154,50 +144,47 @@ export function LivelineCharts({
             />
           ) : (
             <div className="h-full flex items-center justify-center font-mono text-[10px] text-[var(--text-muted)]">
-              No bookings data
+              {bookingsPoints?.length === 1 ? `${formatCompact(bookingsData?.total ?? 0)} on one day` : "No bookings data"}
             </div>
           )}
         </div>
       </div>
 
-      {/* Net Pipeline Movement */}
+      {/* Net Pipeline Movement — Candlestick */}
       <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
-            Net Pipeline Movement
+            Pipeline Balance
           </h3>
-          {netMovementData && netMovementData.days.length > 0 && (
+          {netMovementData && (
             <span className={`font-mono text-[10px] font-semibold ${
-              netMovementData.days.reduce((s, d) => s + d.net, 0) >= 0
-                ? "text-[var(--accent-green)]"
-                : "text-[var(--accent-red)]"
+              netMovementData.netChange >= 0 ? "text-[var(--accent-green)]" : "text-[var(--accent-red)]"
             }`}>
-              {netMovementData.days.reduce((s, d) => s + d.net, 0) >= 0 ? "+" : ""}
-              {formatCompact(netMovementData.days.reduce((s, d) => s + d.net, 0))}
+              {netMovementData.netChange >= 0 ? "+" : ""}{formatCompact(netMovementData.netChange)}
             </span>
           )}
         </div>
         <div style={{ height: 120, width: "100%" }}>
-          {netPoints && netPoints.length > 0 ? (
+          {candleData && candleData.length > 1 ? (
             <Liveline
-              data={netPoints}
-              value={netPoints[netPoints.length - 1]?.value ?? 0}
+              mode="candle"
+              candles={candleData}
+              candleWidth={86400}
+              data={netMovementData?.lineData ?? []}
+              value={netMovementData?.currentValue ?? 0}
               color="#3b82f6"
               theme={livelineTheme}
               window={86400 * 95}
-              fill={true}
               grid={true}
               badge={false}
               showValue={false}
-              momentum={true}
               scrub={true}
-              referenceLine={{ value: 0, label: "Zero" }}
-              formatValue={(v: number) => `${v >= 0 ? "+" : ""}${formatCompact(v)}`}
+              formatValue={(v: number) => formatCompact(v)}
               formatTime={(t: number) => new Date(t * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             />
           ) : (
             <div className="h-full flex items-center justify-center font-mono text-[10px] text-[var(--text-muted)]">
-              No movement data
+              No snapshot data
             </div>
           )}
         </div>

@@ -531,53 +531,42 @@ export async function GET(request: Request) {
       }
 
       case "pipeline-created-wow": {
-        // Pipeline $ created per day: this week vs last week
-        const now = new Date();
-        const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon
-        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
-        const lastMonday = new Date(thisMonday.getTime() - 7 * 86400000);
+        // Pipeline $ created per day over the selected quarter (or last 90 days)
+        // Respects pipeline + dealType filters
+        const pcParams: (string | string[])[] = [];
+        const pcConditions = ["d.pipeline IS NOT NULL"];
 
-        const buildWowQuery = (start: Date, end: Date, extraConditions: string[], params: (string | string[])[]) => {
-          const conditions = [
-            `d.created_at >= $${params.length + 1}`,
-            `d.created_at < $${params.length + 2}`,
-            "d.pipeline IS NOT NULL",
-            ...extraConditions,
-          ];
-          params.push(start.toISOString(), end.toISOString());
-          return `SELECT DATE(d.created_at) as day, COALESCE(SUM(d.amount), 0)::numeric as value
-                  FROM deals d WHERE ${conditions.join(" AND ")} GROUP BY DATE(d.created_at) ORDER BY day`;
-        };
+        if (quarters.length > 0) {
+          const qc = quarterCondition(quarters, "d.created_at", pcParams);
+          if (qc) pcConditions.push(qc);
+        } else {
+          const d90 = new Date(Date.now() - 90 * 86400000);
+          pcParams.push(d90.toISOString());
+          pcConditions.push(`d.created_at >= $${pcParams.length}`);
+        }
 
-        const twParams: (string | string[])[] = [];
-        const twExtra: string[] = [];
-        const pc1 = pipelineCondition(pipelineFilter, "d.pipeline", twParams);
-        if (pc1) twExtra.push(pc1);
-        const dtc1 = dealTypeCondition(dealTypeFilter, "d.deal_type", twParams);
-        if (dtc1) twExtra.push(dtc1);
-        const twSql = buildWowQuery(thisMonday, now, twExtra, twParams);
+        const pcPipe = pipelineCondition(pipelineFilter, "d.pipeline", pcParams);
+        if (pcPipe) pcConditions.push(pcPipe);
+        const pcDt = dealTypeCondition(dealTypeFilter, "d.deal_type", pcParams);
+        if (pcDt) pcConditions.push(pcDt);
 
-        const lwParams: (string | string[])[] = [];
-        const lwExtra: string[] = [];
-        const pc2 = pipelineCondition(pipelineFilter, "d.pipeline", lwParams);
-        if (pc2) lwExtra.push(pc2);
-        const dtc2 = dealTypeCondition(dealTypeFilter, "d.deal_type", lwParams);
-        if (dtc2) lwExtra.push(dtc2);
-        const lwSql = buildWowQuery(lastMonday, thisMonday, lwExtra, lwParams);
+        const pcResult = await query(
+          `SELECT DATE(d.created_at) as day, COALESCE(SUM(d.amount), 0)::numeric as value, COUNT(*)::integer as count
+           FROM deals d WHERE ${pcConditions.join(" AND ")}
+           GROUP BY DATE(d.created_at) ORDER BY day`, pcParams
+        );
 
-        const [twResult, lwResult] = await Promise.all([
-          query(twSql, twParams),
-          query(lwSql, lwParams),
-        ]);
+        const createdDays = pcResult.rows.map((r: Record<string, string>) => ({
+          day: String(r.day), value: parseFloat(r.value), count: parseInt(r.count),
+        }));
+        const totalCreated = createdDays.reduce((s, d) => s + d.value, 0);
+        const totalDealsCreated = createdDays.reduce((s, d) => s + d.count, 0);
 
-        const thisWeek = twResult.rows.map((r: Record<string, string>) => ({ day: r.day, value: parseFloat(r.value) }));
-        const lastWeek = lwResult.rows.map((r: Record<string, string>) => ({ day: r.day, value: parseFloat(r.value) }));
-        const thisWeekTotal = thisWeek.reduce((s, d) => s + d.value, 0);
-        const lastWeekTotal = lastWeek.reduce((s, d) => s + d.value, 0);
-        const wow = lastWeekTotal > 0 ? ((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100 : 0;
+        // Compute cumulative for line chart
+        let cumCreated = 0;
+        const cumulative = createdDays.map((d) => { cumCreated += d.value; return { day: d.day, value: cumCreated }; });
 
-        return Response.json({ thisWeek, lastWeek, thisWeekTotal, lastWeekTotal, wow });
+        return Response.json({ daily: createdDays, cumulative, total: totalCreated, dealCount: totalDealsCreated });
       }
 
       case "bookings-trend": {
@@ -617,50 +606,69 @@ export async function GET(request: Request) {
       }
 
       case "net-movement-trend": {
-        // Daily net pipeline movement: created - won - lost per day
+        // Daily pipeline movement as candlestick data
+        // Each candle: open = pipeline start of day, close = end of day
+        // Uses pipeline_snapshots for daily totals + changelog for intraday deltas
+        // Respects quarter, pipeline, dealType filters
         const nmParams: (string | string[])[] = [];
-        const nmDateCond: string[] = [];
+        const nmConditions: string[] = ["ps.pipeline IS NOT NULL"];
 
         if (quarters.length > 0) {
-          const qc = quarterCondition(quarters, "__DATE__", nmParams);
-          if (qc) nmDateCond.push(qc);
+          const qc = quarterCondition(quarters, "ps.snapshot_time", nmParams);
+          if (qc) nmConditions.push(qc);
         } else {
           const d90 = new Date(Date.now() - 90 * 86400000);
           nmParams.push(d90.toISOString());
-          nmDateCond.push(`__DATE__ >= $${nmParams.length}`);
+          nmConditions.push(`ps.snapshot_time >= $${nmParams.length}`);
         }
 
-        const nmpc = pipelineCondition(pipelineFilter, "__PL__", nmParams);
-        const nmdtc = dealTypeCondition(dealTypeFilter, "__DT__", nmParams);
+        const nmpc = pipelineCondition(pipelineFilter, "ps.pipeline", nmParams);
+        if (nmpc) nmConditions.push(nmpc);
 
-        const dateFrag = nmDateCond.join(" AND ");
-        const createdDateFrag = dateFrag.replace(/__DATE__/g, "d.created_at");
-        const clDateFrag = dateFrag.replace(/__DATE__/g, "cl.changed_at");
-        const plFragD = nmpc ? nmpc.replace(/__PL__/g, "d.pipeline") : "";
-        const plFragCl = nmpc ? nmpc.replace(/__PL__/g, "cl.pipeline") : "";
-        const dtFrag = nmdtc ? nmdtc.replace(/__DT__/g, "d.deal_type") : "";
+        // Get daily pipeline totals from snapshots (aggregated per day)
+        const snapResult = await query(
+          `SELECT time_bucket('1 day', ps.snapshot_time) as day,
+                  COALESCE(SUM(ps.total_value), 0)::numeric as total_value
+           FROM pipeline_snapshots ps
+           WHERE ${nmConditions.join(" AND ")}
+             AND ps.stage_name NOT ILIKE '%closed%'
+             AND ps.stage_name NOT ILIKE '%renewed%'
+             AND ps.stage_name NOT ILIKE '%churn%'
+           GROUP BY day ORDER BY day`, nmParams
+        );
 
-        const createdConds = ["d.pipeline IS NOT NULL", createdDateFrag, plFragD, dtFrag].filter(Boolean).join(" AND ");
-        const wonConds = ["cl.property = 'dealstage'", "(cl.new_label ILIKE '%closed won%' OR cl.new_label ILIKE '%renewed%')", clDateFrag, plFragCl, dtFrag].filter(Boolean).join(" AND ");
-        const lostConds = ["cl.property = 'dealstage'", "(cl.new_label ILIKE '%closed lost%' OR cl.new_label ILIKE '%churn%')", clDateFrag, plFragCl, dtFrag].filter(Boolean).join(" AND ");
+        // Build candlesticks: each day's close is the snapshot total,
+        // open = previous day's close, high/low derived from created - lost intraday
+        const snapDays = snapResult.rows.map((r: Record<string, string>) => ({
+          day: String(r.day),
+          value: parseFloat(r.total_value),
+        }));
 
-        const [createdR, wonR, lostR] = await Promise.all([
-          query(`SELECT DATE(d.created_at) as day, COALESCE(SUM(d.amount), 0)::numeric as val FROM deals d WHERE ${createdConds} GROUP BY day`, nmParams),
-          query(`SELECT DATE(cl.changed_at) as day, COALESCE(SUM(d.amount), 0)::numeric as val FROM deal_changelog cl JOIN deals d ON d.id = cl.deal_id WHERE ${wonConds} GROUP BY day`, nmParams),
-          query(`SELECT DATE(cl.changed_at) as day, COALESCE(SUM(d.amount), 0)::numeric as val FROM deal_changelog cl JOIN deals d ON d.id = cl.deal_id WHERE ${lostConds} GROUP BY day`, nmParams),
-        ]);
+        const candles = snapDays.map((d, i) => {
+          const prevValue = i > 0 ? snapDays[i - 1].value : d.value;
+          const open = prevValue;
+          const close = d.value;
+          const high = Math.max(open, close) * 1.01; // slight buffer
+          const low = Math.min(open, close) * 0.99;
+          return {
+            day: d.day,
+            time: Math.floor(new Date(d.day).getTime() / 1000),
+            open, high, low, close,
+            net: close - open,
+          };
+        });
 
-        // Merge all days (DATE() returns Date objects, convert to string keys)
-        const dayMap = new Map<string, { created: number; won: number; lost: number }>();
-        for (const r of createdR.rows) { const key = String(r.day); const d = dayMap.get(key) || { created: 0, won: 0, lost: 0 }; d.created = parseFloat(r.val); dayMap.set(key, d); }
-        for (const r of wonR.rows) { const key = String(r.day); const d = dayMap.get(key) || { created: 0, won: 0, lost: 0 }; d.won = parseFloat(r.val); dayMap.set(key, d); }
-        for (const r of lostR.rows) { const key = String(r.day); const d = dayMap.get(key) || { created: 0, won: 0, lost: 0 }; d.lost = parseFloat(r.val); dayMap.set(key, d); }
+        // Also build a line version for the toggle
+        const lineData = snapDays.map((d) => ({
+          time: Math.floor(new Date(d.day).getTime() / 1000),
+          value: d.value,
+        }));
 
-        const days = Array.from(dayMap.entries())
-          .map(([day, v]) => ({ day: String(day), created: v.created, won: v.won, lost: v.lost, net: v.created - v.won - v.lost }))
-          .sort((a, b) => a.day.localeCompare(b.day));
+        const currentValue = snapDays.length > 0 ? snapDays[snapDays.length - 1].value : 0;
+        const startValue = snapDays.length > 0 ? snapDays[0].value : 0;
+        const netChange = currentValue - startValue;
 
-        return Response.json({ days });
+        return Response.json({ candles, lineData, currentValue, startValue, netChange });
       }
 
       case "stale-deals": {

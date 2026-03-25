@@ -161,9 +161,9 @@ export default function Dashboard() {
     }
     return "cards";
   });
-  const [wowData, setWowData] = useState<{ thisWeek: { day: string; value: number }[]; lastWeek: { day: string; value: number }[]; thisWeekTotal: number; lastWeekTotal: number; wow: number } | null>(null);
+  const [pipelineCreatedData, setPipelineCreatedData] = useState<{ daily: { day: string; value: number; count: number }[]; cumulative: { day: string; value: number }[]; total: number; dealCount: number } | null>(null);
   const [bookingsData, setBookingsData] = useState<{ daily: { day: string; value: number }[]; cumulative: { day: string; value: number }[]; total: number } | null>(null);
-  const [netMovementTrend, setNetMovementTrend] = useState<{ days: { day: string; created: number; won: number; lost: number; net: number }[] } | null>(null);
+  const [netMovementTrend, setNetMovementTrend] = useState<{ candles: { day: string; time: number; open: number; high: number; low: number; close: number; net: number }[]; lineData: { time: number; value: number }[]; currentValue: number; startValue: number; netChange: number } | null>(null);
 
   const activeRequest = useRef(0);
 
@@ -305,7 +305,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot?type=changelog&limit=200${qParam}${pParam}${dtParam}`),
         fetch("/api/hubspot?type=sync-status"),
         fetch(`/api/hubspot?type=pipeline-ledger${qParam}${pParam}${dtParam}`),
-        fetch(`/api/hubspot?type=pipeline-created-wow${pParam}${dtParam}`),
+        fetch(`/api/hubspot?type=pipeline-created-wow${qParam}${pParam}${dtParam}`),
         fetch(`/api/hubspot?type=bookings-trend${qParam}${pParam}${dtParam}`),
         fetch(`/api/hubspot?type=net-movement-trend${qParam}${pParam}${dtParam}`),
       ]);
@@ -319,7 +319,7 @@ export default function Dashboard() {
       }
       if (wowRes.ok && !isStale()) {
         const d = await wowRes.json();
-        if (!isStale()) setWowData(d);
+        if (!isStale()) setPipelineCreatedData(d);
       }
       if (bookingsRes.ok && !isStale()) {
         const d = await bookingsRes.json();
@@ -526,7 +526,7 @@ export default function Dashboard() {
               <StatsCards stats={stats} />
             ) : (
               <LivelineCharts
-                wowData={wowData}
+                pipelineCreatedData={pipelineCreatedData}
                 bookingsData={bookingsData}
                 netMovementData={netMovementTrend}
                 theme={typeof document !== "undefined" ? document.documentElement.getAttribute("data-theme") || "terminal" : "terminal"}
