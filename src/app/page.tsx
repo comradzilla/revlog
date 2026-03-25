@@ -494,6 +494,30 @@ export default function Dashboard() {
                 total: {totalDeals}
               </span>
             )}
+            {/* Metrics/Trends toggle — inline with filters */}
+            <div className="hidden sm:flex items-center gap-1 ml-auto">
+              <div className="h-4 w-px bg-[var(--border-color)] mr-1" />
+              <button
+                onClick={() => { setStatsView("cards"); localStorage.setItem("revradar-stats-view", "cards"); }}
+                className={`font-mono text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                  statsView === "cards"
+                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                    : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                metrics
+              </button>
+              <button
+                onClick={() => { setStatsView("charts"); localStorage.setItem("revradar-stats-view", "charts"); }}
+                className={`font-mono text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                  statsView === "charts"
+                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                    : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                trends
+              </button>
+            </div>
           </div>
         </div>
 
@@ -508,23 +532,6 @@ export default function Dashboard() {
 
         {/* Stats / Charts row with flip toggle (hidden on mobile — MobileStatsSummary shown above) */}
         <div className="hidden sm:block">
-          {/* Metrics / Trends toggle */}
-          <div className="flex items-center gap-1 mb-3">
-            {(["cards", "charts"] as const).map((view) => (
-              <button
-                key={view}
-                onClick={() => { setStatsView(view); localStorage.setItem("revradar-stats-view", view); }}
-                className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
-                  statsView === view
-                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
-                    : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                }`}
-              >
-                {view === "cards" ? "metrics" : "trends"}
-              </button>
-            ))}
-          </div>
-
           {statsView === "cards" ? (
             <StatsCards stats={stats} />
           ) : (
