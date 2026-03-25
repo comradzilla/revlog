@@ -21,7 +21,7 @@ src/
 │   │   │   ├── login/route.ts    # POST: validate password, set session cookie
 │   │   │   └── logout/route.ts   # POST: clear session cookie
 │   │   ├── cron/route.ts         # Cron endpoint (?tier=incremental|full)
-│   │   ├── hubspot/route.ts      # All 17 read endpoints (reads from Postgres, incl. pipeline-ledger)
+│   │   ├── hubspot/route.ts      # All 20 read endpoints (reads from Postgres, incl. pipeline-ledger + chart data)
 │   │   └── sync/route.ts         # Manual sync trigger (POST)
 │   ├── login/page.tsx            # Terminal-styled password login page
 │   ├── page.tsx                  # Main dashboard ("use client", 12+ parallel fetches)
@@ -36,6 +36,7 @@ src/
 │   ├── MobileSidebarTabs.tsx     # Tabbed Funnels/Stale/Recent (lg:hidden)
 │   ├── PipelineFunnel.tsx        # Stage funnel with inline filter support
 │   ├── StatsCards.tsx            # 5 metric cards (pipeline, changes, won, lost)
+│   ├── LivelineCharts.tsx        # 3 Liveline charts (pipeline created, bookings, pipeline balance candlestick)
 │   ├── NetMovementBar.tsx        # Created/won/lost + amount grew/shrank
 │   ├── StaleDealsList.tsx        # 30+ day idle deals warning
 │   ├── RecentDeals.tsx           # Time-in-stage badges
@@ -88,6 +89,22 @@ Self-scheduling via `src/instrumentation.ts` — no external cron needed. HubSpo
 - Middleware exemptions: `/login`, `/api/auth/*`, `/api/cron` (has own CRON_SECRET), `/_next/*`, `/favicon.ico`
 - If `SESSION_SECRET` env var is not set, middleware allows all access (dev mode convenience)
 - Env vars needed on server: `DASHBOARD_PASSWORD`, `SESSION_SECRET` (any random string)
+
+## Liveline Visual Charts (v2.4)
+
+- **Library**: `liveline@0.0.7` — 60fps canvas chart rendering, no CSS imports needed
+- **Component**: `src/components/LivelineCharts.tsx` (`"use client"`)
+- **Toggle**: `statsView` state (`"cards"` | `"charts"`) — inline `metrics` / `trends` pills at end of pipeline filter bar
+- **Persistence**: `localStorage.getItem("revradar-stats-view")`
+- **Charts**:
+  1. **Pipeline Created** — cumulative line over selected quarter, green `#10b981`, shows deal count
+  2. **Bookings (Cumulative)** — cumulative closed-won $, green line
+  3. **Pipeline Balance** — **candlestick mode** (`mode="candle"`) using daily `pipeline_snapshots`, shows open/close per day
+- **API endpoints**: `pipeline-created-wow`, `bookings-trend`, `net-movement-trend`
+- **All charts respect filters**: quarter, pipeline, deal type passed via URL params
+- **Liveline props**: `data` + `value` always required (even with `series` or `candles`), `window` must match data timespan (default 30s is too small for daily data — use `86400 * 95` for quarters)
+- **Mobile**: Charts hidden (`hidden sm:block`) — too small at 375px
+- **Candlestick data**: Each candle = one day, `open` = previous day's snapshot total, `close` = current day's total, `candleWidth={86400}`
 
 ## Mobile Layout
 

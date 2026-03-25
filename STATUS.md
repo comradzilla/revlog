@@ -11,7 +11,7 @@ Last updated: 2026-03-24
 | Item | Value |
 |------|-------|
 | Branch | `v2-pipeline-intelligence` (not merged to main yet) |
-| Last version | v2.3.2 |
+| Last version | v2.4 |
 | Build | Passing (`npm run build` succeeds) |
 | Database | ~3,022 deals, 5 pipelines, ~57 stage label mappings |
 | HubSpot Hub ID | 3282655 |
@@ -33,6 +33,8 @@ Last updated: 2026-03-24
 - [x] Close date move tracking — DATE IN / DATE OUT badges when deals enter/leave a quarter
 - [x] Hidden count banner — "X out-of-quarter changes hidden" (dismissable)
 - [x] 5 stat cards: Open Pipeline (filtered/all split), Changes Today, Changes (7d), Closed Won, Closed Lost
+- [x] Liveline visual charts: Pipeline Created (cumulative), Bookings (cumulative), Pipeline Balance (candlestick)
+- [x] Metrics/Trends toggle — inline with filter bar, switches between stat cards and charts
 - [x] Open Pipeline card shows filtered value + global total as context
 - [x] Win rate and average deal size on Closed Won card
 - [x] Weighted pipeline value on Open Pipeline card (when no filters active)
@@ -94,7 +96,7 @@ Last updated: 2026-03-24
 
 ### Infrastructure
 - [x] TimescaleDB schema with hypertables, indexes, views
-- [x] 16 API endpoint types via /api/hubspot?type=
+- [x] 19 API endpoint types via /api/hubspot?type= (added pipeline-created-wow, bookings-trend, net-movement-trend)
 - [x] Docker Compose for dev and prod
 - [x] pm2 ecosystem config
 - [x] Nginx reverse proxy config
@@ -122,18 +124,16 @@ Last updated: 2026-03-24
 ## What Is Next
 
 ### Immediate
-- [ ] Set DASHBOARD_PASSWORD and SESSION_SECRET env vars on production server
-- [ ] Deploy v2.2 to server (git pull + build + pm2 restart)
 - [ ] Merge `v2-pipeline-intelligence` branch to `main`
 
 ### Short-term
 - [ ] GitHub webhook for auto-deploy on push to main
 - [ ] TimescaleDB compression policy for old changelog and snapshot data
 - [ ] Error boundary component for graceful API failure handling
+- [ ] Fix mobile overflow (scrollWidth 419 > 375px — found by Playwright tests)
 
 ### Future ideas (not committed)
 - [ ] Email/Slack alerts for regressions and stale deals
-- [ ] Pipeline trend charts (data exists in pipeline_snapshots, needs frontend chart)
 - [ ] Forecast model using weighted pipeline + historical win rates
 - [ ] Deal velocity metrics (average time through each stage)
 - [ ] Multi-user auth with role-based access

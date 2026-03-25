@@ -12,6 +12,22 @@ interface Update {
 
 const UPDATES: Update[] = [
   {
+    version: "2.4",
+    date: "2026-03-25",
+    title: "Liveline Visual Charts",
+    description:
+      "Animated trend charts for pipeline creation, bookings, and pipeline balance with candlestick visualization. Toggle between metrics and trends inline with the filter bar.",
+    changes: [
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Pipeline Created chart — cumulative line showing new pipeline $ over the selected quarter" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Bookings chart — cumulative closed-won $ over time with momentum indicator" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Pipeline Balance candlestick — daily open/close of pipeline value, green = grew, red = shrank" },
+      { tag: "NEW", tagColor: "var(--accent-green)", text: "Metrics / Trends toggle inline with pipeline filter bar (zero extra vertical space)" },
+      { tag: "IMPROVED", tagColor: "var(--accent-cyan)", text: "All charts respect active filters (quarter, pipeline, deal type)" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "3 new API endpoints: pipeline-created-wow, bookings-trend, net-movement-trend" },
+      { tag: "INFRA", tagColor: "var(--accent-blue)", text: "Liveline library (liveline@0.0.7) — 60fps canvas rendering, scrub on hover" },
+    ],
+  },
+  {
     version: "2.3.3",
     date: "2026-03-24",
     title: "Stale Deals Intelligence",

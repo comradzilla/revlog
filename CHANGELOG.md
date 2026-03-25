@@ -4,6 +4,58 @@ Detailed version history for RevLog. Each entry documents what changed, why, and
 
 ---
 
+## v2.4 (2026-03-25) -- Liveline Visual Charts
+
+**Theme:** Add animated trend charts (Pipeline Created, Bookings, Pipeline Balance candlestick) with inline metrics/trends toggle.
+
+### What Changed
+
+- 3 new Liveline charts: Pipeline Created (cumulative over quarter), Bookings (cumulative closed-won), Pipeline Balance (candlestick from daily snapshots)
+- All charts respect active filters (quarter, pipeline, deal type)
+- Metrics/Trends segmented toggle inline with pipeline filter bar (zero extra vertical space)
+- Pipeline Balance uses candlestick mode showing daily open/close of pipeline value
+- Pipeline Created spans full quarter (not just WoW) with deal count
+- Charts hidden on mobile (too small for 375px)
+- Liveline library: 60fps canvas rendering, scrub on hover, momentum indicators
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `src/components/LivelineCharts.tsx` | 3 chart cards with Liveline, candlestick + line modes |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/app/api/hubspot/route.ts` | Added `pipeline-created-wow`, `bookings-trend`, `net-movement-trend` endpoints |
+| `src/app/page.tsx` | Chart data fetching, `statsView` state, metrics/trends toggle, `LivelineCharts` render |
+| `package.json` | Added `liveline` dependency |
+
+### Decisions
+
+- **Candlestick for pipeline balance**: Shows daily open/close visually — green candle = pipeline grew, red = shrank. More intuitive than a line for balance changes.
+- **Inline toggle**: Tried floating emoji button (ugly), standalone pills (wasted space), settled on inline with filter bar using `ml-auto`.
+- **Quarter-scoped creation**: CEO wanted to see pipeline creation over the quarter, not just WoW. Cumulative line shows momentum.
+- **Charts hidden on mobile**: Liveline canvases are too small at 375px to be useful. Mobile users keep MobileStatsSummary.
+
+---
+
+## v2.3.3 (2026-03-24) -- Stale Deals Intelligence
+
+**Theme:** Smarter stale deal detection and filter integration.
+
+### What Changed
+
+- Stale definition: 30+ days in same stage AND no next step update in 14+ days
+- `?` tooltip on Stale Deals header explaining criteria
+- Stale deals respect pipeline and deal type filters
+- Syncs `hs_next_step` property from HubSpot
+- Increased limit from 20 to 50, show-more threshold from 5 to 10
+- DB columns: `deals.next_step`, `deals.stage_entered_at`
+
+---
+
 ## v2.3.2 (2026-03-24) -- CEO Bug Fixes
 
 **Theme:** Fix 4 user-reported bugs from first CEO testing session.
