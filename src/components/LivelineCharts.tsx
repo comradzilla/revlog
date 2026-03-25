@@ -105,6 +105,7 @@ export function LivelineCharts({
               series={wowSeries}
               color="#10b981"
               theme={livelineTheme}
+              window={86400 * 8}
               fill={true}
               grid={true}
               badge={false}
@@ -141,6 +142,7 @@ export function LivelineCharts({
               value={bookingsData?.total ?? 0}
               color="#10b981"
               theme={livelineTheme}
+              window={86400 * 95}
               fill={true}
               grid={true}
               badge={false}
@@ -182,6 +184,7 @@ export function LivelineCharts({
               value={netPoints[netPoints.length - 1]?.value ?? 0}
               color="#3b82f6"
               theme={livelineTheme}
+              window={86400 * 95}
               fill={true}
               grid={true}
               badge={false}
