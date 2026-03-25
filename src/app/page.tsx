@@ -508,31 +508,33 @@ export default function Dashboard() {
 
         {/* Stats / Charts row with flip toggle (hidden on mobile — MobileStatsSummary shown above) */}
         <div className="hidden sm:block">
-          <div className="relative">
-            {/* Toggle button */}
-            <button
-              onClick={() => {
-                const next = statsView === "cards" ? "charts" : "cards";
-                setStatsView(next);
-                localStorage.setItem("revradar-stats-view", next);
-              }}
-              className="absolute -top-1 right-0 z-10 font-mono text-[10px] px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:border-[var(--text-secondary)] transition-colors cursor-pointer"
-              title={statsView === "cards" ? "Switch to charts" : "Switch to cards"}
-            >
-              {statsView === "cards" ? "📊 charts" : "📋 cards"}
-            </button>
-
-            {statsView === "cards" ? (
-              <StatsCards stats={stats} />
-            ) : (
-              <LivelineCharts
-                pipelineCreatedData={pipelineCreatedData}
-                bookingsData={bookingsData}
-                netMovementData={netMovementTrend}
-                theme={typeof document !== "undefined" ? document.documentElement.getAttribute("data-theme") || "terminal" : "terminal"}
-              />
-            )}
+          {/* Metrics / Trends toggle */}
+          <div className="flex items-center gap-1 mb-3">
+            {(["cards", "charts"] as const).map((view) => (
+              <button
+                key={view}
+                onClick={() => { setStatsView(view); localStorage.setItem("revradar-stats-view", view); }}
+                className={`font-mono text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                  statsView === view
+                    ? "border-[var(--accent-blue)] bg-[var(--accent-blue-dim)] text-[var(--accent-blue)]"
+                    : "border-[var(--border-color)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                {view === "cards" ? "metrics" : "trends"}
+              </button>
+            ))}
           </div>
+
+          {statsView === "cards" ? (
+            <StatsCards stats={stats} />
+          ) : (
+            <LivelineCharts
+              pipelineCreatedData={pipelineCreatedData}
+              bookingsData={bookingsData}
+              netMovementData={netMovementTrend}
+              theme={typeof document !== "undefined" ? document.documentElement.getAttribute("data-theme") || "terminal" : "terminal"}
+            />
+          )}
         </div>
 
         {/* Net movement bar (hidden on mobile) */}
