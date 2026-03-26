@@ -17,7 +17,8 @@ function msUntilNextHour(hour: number): number {
 async function triggerSync(tier: "incremental" | "full") {
   try {
     const port = process.env.PORT || 3000;
-    const res = await fetch(`http://localhost:${port}/api/cron?tier=${tier}`);
+    const secret = process.env.CRON_SECRET ? `&secret=${process.env.CRON_SECRET}` : "";
+    const res = await fetch(`http://localhost:${port}/api/cron?tier=${tier}${secret}`);
     if (!res.ok) {
       console.error(`[scheduler] ${tier} sync failed: ${res.status}`);
     }
