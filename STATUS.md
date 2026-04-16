@@ -11,7 +11,7 @@ Last updated: 2026-03-24
 | Item | Value |
 |------|-------|
 | Branch | `v2-pipeline-intelligence` (not merged to main yet) |
-| Last version | v2.4 |
+| Last version | v2.5 (Analytics Module) |
 | Build | Passing (`npm run build` succeeds) |
 | Database | ~3,022 deals, 5 pipelines, ~57 stage label mappings |
 | HubSpot Hub ID | 3282655 |
