@@ -1,96 +1,16 @@
 import { query } from "@/lib/db";
+import {
+  UPSELL_TYPES,
+  NEW_BIZ_TYPES,
+  STAGE_WEIGHT_MAP,
+  parseQuarters,
+  quarterCondition,
+  dealTypeCondition,
+  pipelineCondition,
+  isStageRegression,
+} from "@/lib/query-helpers";
 
 export const dynamic = "force-dynamic";
-
-const UPSELL_TYPES = ["existingbusiness", "existing_business"];
-const NEW_BIZ_TYPES = ["newbusiness", "new_business"];
-
-// Stage weights for weighted pipeline (mirrors hubspot.ts)
-const STAGE_WEIGHT_MAP: Record<string, number> = {
-  "1166852615": 0.10, "1166852616": 0.25, "1166852617": 0.50,
-  "1166852618": 0.70, "1166852619": 0.90,
-  "1312827533": 0.10, "1312827535": 0.25, "1312827528": 0.50,
-  "1312827529": 0.70, "1312827530": 0.90,
-  "224212800": 0.10, "224212801": 0.25, "224212802": 0.50, "227590167": 0.70,
-};
-
-function parseQuarters(q: string | null): { start: Date; end: Date }[] {
-  if (!q) return [];
-  return q.split(",").map(part => {
-    const match = part.trim().match(/^(\d{4})-Q([1-4])$/);
-    if (!match) return null;
-    const year = parseInt(match[1]);
-    const quarter = parseInt(match[2]);
-    const startMonth = (quarter - 1) * 3;
-    return {
-      start: new Date(year, startMonth, 1),
-      end: new Date(year, startMonth + 3, 1),
-    };
-  }).filter(Boolean) as { start: Date; end: Date }[];
-}
-
-function quarterCondition(
-  quarters: { start: Date; end: Date }[],
-  column: string,
-  params: (string | number | Date | string[])[]
-): string {
-  if (quarters.length === 0) return "";
-  if (quarters.length === 1) {
-    params.push(quarters[0].start.toISOString(), quarters[0].end.toISOString());
-    return `${column} >= $${params.length - 1} AND ${column} < $${params.length}`;
-  }
-  const parts = quarters.map(q => {
-    params.push(q.start.toISOString(), q.end.toISOString());
-    return `(${column} >= $${params.length - 1} AND ${column} < $${params.length})`;
-  });
-  return `(${parts.join(" OR ")})`;
-}
-
-function dealTypeCondition(
-  dtFilter: string | null,
-  column: string,
-  params: (string | number | Date | string[])[]
-): string {
-  if (!dtFilter || dtFilter === "all") return "";
-  if (dtFilter === "upsell") {
-    params.push(UPSELL_TYPES);
-    return `${column} = ANY($${params.length})`;
-  }
-  if (dtFilter === "newbusiness") {
-    params.push(NEW_BIZ_TYPES);
-    return `${column} = ANY($${params.length})`;
-  }
-  params.push(dtFilter);
-  return `${column} = $${params.length}`;
-}
-
-function pipelineCondition(
-  pFilter: string | null,
-  column: string,
-  params: (string | number | Date | string[])[]
-): string {
-  if (!pFilter || pFilter === "all") return "";
-  const ids = pFilter.split(",").map(s => s.trim()).filter(Boolean);
-  if (ids.length === 0) return "";
-  if (ids.length === 1) {
-    params.push(ids[0]);
-    return `${column} = $${params.length}`;
-  }
-  params.push(ids);
-  return `${column} = ANY($${params.length})`;
-}
-
-// Detect stage regression from label prefixes (e.g., "05 - Negotiation" → "02 - Qualification")
-function isStageRegression(oldLabel: string, newLabel: string): boolean {
-  const oldMatch = oldLabel.match(/^(\d+)/);
-  const newMatch = newLabel.match(/^(\d+)/);
-  if (!oldMatch || !newMatch) return false;
-  const oldNum = parseInt(oldMatch[1]);
-  const newNum = parseInt(newMatch[1]);
-  // Stage 0 = Closed Lost, don't count as regression
-  if (newNum === 0) return false;
-  return newNum < oldNum;
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

@@ -24,11 +24,13 @@ export function StatusBar({
   isLoading,
   onRefresh,
   syncMeta,
+  currentPage,
 }: {
   lastUpdated: string | null;
   isLoading: boolean;
   onRefresh: () => void;
   syncMeta?: SyncMeta | null;
+  currentPage?: "changelog" | "analytics";
 }) {
   return (
     <header className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]/80 backdrop-blur-sm sticky top-0 z-50 transition-colors duration-300">
@@ -43,8 +45,15 @@ export function StatusBar({
           <div className="h-4 w-px bg-[var(--border-color)] hidden sm:block" />
           <h1 className="font-mono text-sm font-semibold text-[var(--text-primary)]">
             <span className="text-[var(--accent-blue)]">$</span> pipeline
-            <span className="text-[var(--text-muted)]">/</span>changelog
+            <span className="text-[var(--text-muted)]">/</span>
+            {currentPage === "analytics" ? "analytics" : "changelog"}
           </h1>
+          <a
+            href={currentPage === "analytics" ? "/" : "/analytics"}
+            className="font-mono text-[10px] text-[var(--text-muted)] hover:text-[var(--accent-blue)] transition-colors hidden sm:inline"
+          >
+            {currentPage === "analytics" ? "← changelog" : "analytics →"}
+          </a>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">

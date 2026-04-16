@@ -155,12 +155,12 @@ export default function Dashboard() {
   const [changelogView, setChangelogView] = useState<"changelog" | "ledger">("changelog");
   const [ledgerData, setLedgerData] = useState<{ currentBalance: number; quarterBalance: number | null; quarterLabel: string | null; transactions: { dealId: string; dealName: string; pipelineName: string; type: string; delta: number; description: string; timestamp: string; timestampShort: string; balance: number }[]; hiddenCount: number } | null>(null);
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
-  const [statsView, setStatsView] = useState<"cards" | "charts">(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("revradar-stats-view") as "cards" | "charts") || "cards";
-    }
-    return "cards";
-  });
+  const [statsView, setStatsView] = useState<"cards" | "charts">("cards");
+  // Hydrate from localStorage after mount to avoid SSR mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem("revradar-stats-view") as "cards" | "charts" | null;
+    if (saved) setStatsView(saved);
+  }, []);
   const [pipelineCreatedData, setPipelineCreatedData] = useState<{ daily: { day: string; value: number; count: number }[]; cumulative: { day: string; value: number }[]; total: number; dealCount: number } | null>(null);
   const [bookingsData, setBookingsData] = useState<{ daily: { day: string; value: number }[]; cumulative: { day: string; value: number }[]; total: number } | null>(null);
   const [netMovementTrend, setNetMovementTrend] = useState<{ candles: { day: string; time: number; open: number; high: number; low: number; close: number; net: number }[]; lineData: { time: number; value: number }[]; currentValue: number; startValue: number; netChange: number } | null>(null);
