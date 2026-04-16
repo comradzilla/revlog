@@ -123,8 +123,6 @@ export default function AnalyticsPage() {
   // Drill-down state
   const [drilldownDeals, setDrilldownDeals] = useState<DrilldownDeal[]>([]);
   const [drilldownTotal, setDrilldownTotal] = useState({ count: 0, value: 0 });
-  const [drilldownTitle, setDrilldownTitle] = useState("");
-  const [drilldownOpen, setDrilldownOpen] = useState(false);
   const [drilldownSort, setDrilldownSort] = useState("amount");
   const [drilldownOrder, setDrilldownOrder] = useState("desc");
 
@@ -159,12 +157,14 @@ export default function AnalyticsPage() {
         leftToRunRes,
         pipelineValueRes,
         syncStatusRes,
+        dealsRes,
       ] = await Promise.all([
         fetch(`/api/analytics?type=pipeline-over-time&granularity=${granularity}&breakdown=${breakdown}&metric=${metric}${qParam}${pParam}${dtParam}${oParam}`),
         fetch(`/api/analytics?type=pipeline-created${qParam}${pParam}${dtParam}${oParam}${compareParams}`),
         fetch(`/api/analytics?type=left-to-run${qParam}${pParam}${dtParam}${oParam}`),
         fetch(`/api/hubspot?type=pipeline-value${pParam}${dtParam}${qParam}`),
         fetch("/api/hubspot?type=sync-status"),
+        fetch(`/api/analytics?type=deal-drilldown&sort=${drilldownSort}&order=${drilldownOrder}&limit=50${qParam}${pParam}${dtParam}${oParam}`),
       ]);
 
       if (isStale()) return;
@@ -214,12 +214,20 @@ export default function AnalyticsPage() {
           });
         }
       }
+
+      if (dealsRes.ok) {
+        const d = await dealsRes.json();
+        if (!isStale()) {
+          setDrilldownDeals(d.deals || []);
+          setDrilldownTotal({ count: d.totalCount || 0, value: d.totalValue || 0 });
+        }
+      }
     } catch (err) {
       console.error("[analytics] fetch error:", err);
     } finally {
       if (!isStale()) setIsLoading(false);
     }
-  }, [selectedQuarters, pipelineFilter, dealTypeFilter, ownerFilter, granularity, breakdown, metric, comparisonEnabled, qParam, pParam, dtParam, oParam]);
+  }, [selectedQuarters, pipelineFilter, dealTypeFilter, ownerFilter, granularity, breakdown, metric, comparisonEnabled, drilldownSort, drilldownOrder, qParam, pParam, dtParam, oParam]);
 
   // Fetch reference data on mount
   useEffect(() => {
@@ -251,34 +259,8 @@ export default function AnalyticsPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Drill-down handler
-  const handleDataPointClick = useCallback(async (time: number) => {
-    const date = new Date(time * 1000).toISOString().split("T")[0];
-    setDrilldownTitle(`Deals on ${date}`);
-    setDrilldownOpen(true);
+  // Sort change just updates state — fetchData will re-run via dependency
 
-    const res = await fetch(
-      `/api/analytics?type=deal-drilldown&sort=${drilldownSort}&order=${drilldownOrder}${qParam}${pParam}${dtParam}${oParam}`
-    );
-    if (res.ok) {
-      const d = await res.json();
-      setDrilldownDeals(d.deals || []);
-      setDrilldownTotal({ count: d.totalCount, value: d.totalValue });
-    }
-  }, [drilldownSort, drilldownOrder, qParam, pParam, dtParam, oParam]);
-
-  const handleDrilldownSortChange = useCallback(async (sort: string, order: string) => {
-    setDrilldownSort(sort);
-    setDrilldownOrder(order);
-    const res = await fetch(
-      `/api/analytics?type=deal-drilldown&sort=${sort}&order=${order}${qParam}${pParam}${dtParam}${oParam}`
-    );
-    if (res.ok) {
-      const d = await res.json();
-      setDrilldownDeals(d.deals || []);
-      setDrilldownTotal({ count: d.totalCount, value: d.totalValue });
-    }
-  }, [qParam, pParam, dtParam, oParam]);
 
   // Theme detection
   const [theme, setTheme] = useState("terminal");
@@ -348,7 +330,7 @@ export default function AnalyticsPage() {
             metric={metric}
             setMetric={setMetric}
             theme={theme}
-            onDataPointClick={handleDataPointClick}
+            onDataPointClick={undefined}
           />
           <PipelineCreatedChart
             primary={createdPrimary}
@@ -359,19 +341,16 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        {/* Drill-down table */}
-        {drilldownOpen && (
-          <DealDrilldownTable
-            deals={drilldownDeals}
-            totalCount={drilldownTotal.count}
-            totalValue={drilldownTotal.value}
-            sort={drilldownSort}
-            order={drilldownOrder}
-            onSortChange={handleDrilldownSortChange}
-            onClose={() => setDrilldownOpen(false)}
-            title={drilldownTitle}
-          />
-        )}
+        {/* Deal Pipeline Table — always visible, updates with filters */}
+        <DealDrilldownTable
+          deals={drilldownDeals}
+          totalCount={drilldownTotal.count}
+          totalValue={drilldownTotal.value}
+          sort={drilldownSort}
+          order={drilldownOrder}
+          onSortChange={(s, o) => { setDrilldownSort(s); setDrilldownOrder(o); }}
+          persistent={true}
+        />
       </main>
 
       {/* Footer */}
