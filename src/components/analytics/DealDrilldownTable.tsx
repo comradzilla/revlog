@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { DealLink } from "@/components/DealLink";
+import { TrendIcons } from "@/components/TrendIcons";
+import type { HealthBucket } from "@/lib/health";
 
 interface Deal {
   id: string;
@@ -14,6 +17,10 @@ interface Deal {
   nextStep: string | null;
   dealType: string | null;
   health: "green" | "amber" | "red";
+  healthBucket?: HealthBucket;
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
   priorityScore: number;
   flags: string[];
 }
@@ -29,6 +36,7 @@ interface DealDrilldownTableProps {
   onClose?: () => void;
   title?: string;
   persistent?: boolean;
+  onOpenDeal?: (id: string) => void;
 }
 
 function formatDollars(value: number): string {
@@ -89,6 +97,7 @@ export function DealDrilldownTable({
   onClose,
   title,
   persistent = false,
+  onOpenDeal,
 }: DealDrilldownTableProps) {
   // Close on Escape key (only when not persistent)
   useEffect(() => {
@@ -182,16 +191,26 @@ export function DealDrilldownTable({
                     <span className="text-[var(--text-secondary)] text-[10px]">{deal.priorityScore}</span>
                   </td>
 
-                  {/* Deal Name */}
+                  {/* Deal Name + Trend Icons */}
                   <td className="py-1.5 px-2">
-                    <a
-                      href={`https://app.hubspot.com/contacts/3282655/record/0-3/${deal.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors truncate block max-w-[200px]"
-                    >
-                      {deal.dealName}
-                    </a>
+                    <div className="flex items-center gap-1.5">
+                      <TrendIcons
+                        bucket={deal.healthBucket}
+                        amount={deal.amount}
+                        momentumSignals={{
+                          regression_count: deal.regressionCount,
+                          slip_count: deal.slipCount,
+                          amount_net: deal.amountNet,
+                        }}
+                      />
+                      <DealLink
+                        dealId={deal.id}
+                        dealName={deal.dealName}
+                        onOpenDeal={onOpenDeal}
+                        className="text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors block max-w-[200px]"
+                        wrapperClassName="max-w-[220px]"
+                      />
+                    </div>
                   </td>
 
                   {/* Amount */}

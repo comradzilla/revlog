@@ -9,6 +9,8 @@ import {
   dateRangeCondition,
   type QueryParams,
 } from "@/lib/query-helpers";
+import { buildHealthCte, bucketFor } from "@/lib/health";
+import { getHealthWeights } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -335,13 +337,17 @@ export async function GET(request: Request) {
 
         params.push(limit, offset);
 
+        const weights = await getHealthWeights();
         const result = await query(
-          `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
+          `${buildHealthCte(weights)}
+           SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
                   d.deal_type, d.close_date, d.next_step, d.deal_stage,
                   COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
-                  EXTRACT(DAY FROM NOW() - d.stage_entered_at)::integer as days_in_stage
+                  EXTRACT(DAY FROM NOW() - d.stage_entered_at)::integer as days_in_stage,
+                  h.health_score, h.regression_count, h.slip_count, h.amount_net
            FROM deals d
            LEFT JOIN owners o ON o.id = d.owner_id
+           LEFT JOIN deal_health h ON h.deal_id = d.id
            WHERE ${conditions.join(" AND ")}
            ORDER BY ${sortCol} ${sortDir} NULLS LAST
            LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -360,19 +366,25 @@ export async function GET(request: Request) {
         // Compute health and priority for each deal
         const maxAmount = Math.max(...result.rows.map((r: Record<string, string>) => parseFloat(r.amount || "0")), 1);
 
-        const deals = result.rows.map((r: Record<string, string>) => {
-          const amount = parseFloat(r.amount || "0");
-          const daysInStage = parseInt(r.days_in_stage) || 0;
-          const stageWeight = STAGE_WEIGHT_MAP[r.deal_stage] || 0;
+        const deals = result.rows.map((r: Record<string, string | number | null>) => {
+          const amount = parseFloat(String(r.amount || "0"));
+          const daysInStage = parseInt(String(r.days_in_stage)) || 0;
+          const stageWeight = STAGE_WEIGHT_MAP[r.deal_stage as string] || 0;
 
-          // Health
-          const health = daysInStage < 14 ? "green" : daysInStage < 30 ? "amber" : "red";
+          // Composite health from CTE — same scoring as the rest of the app.
+          // Open deals only on this endpoint, so health_score should never be NULL,
+          // but fall back to an amber-ish derivation if it is.
+          const score = r.health_score === null || r.health_score === undefined
+            ? null
+            : parseInt(String(r.health_score));
+          const bucket = bucketFor(score, weights);
+          const health: "green" | "amber" | "red" = bucket === "green" ? "green" : bucket === "amber" ? "amber" : "red";
 
-          // Priority score (0-100)
+          // Priority score (0-100) — kept as-is for the priority column
           const amountScore = (amount / maxAmount) * 100;
           const stageScore = stageWeight * 100;
           const stalenessScore = Math.min(daysInStage / 60, 1.0) * 100;
-          const flagScore = (daysInStage >= 30 ? 30 : 0); // simplified flag detection
+          const flagScore = (daysInStage >= 30 ? 30 : 0);
           const priorityScore = Math.round(
             amountScore * 0.40 + stageScore * 0.25 + stalenessScore * 0.25 + flagScore * 0.10
           );
@@ -380,7 +392,7 @@ export async function GET(request: Request) {
           // Flags
           const flags: string[] = [];
           if (daysInStage >= 30) flags.push("stale");
-          if (r.close_date && new Date(r.close_date) < new Date()) flags.push("overdue");
+          if (r.close_date && new Date(r.close_date as string) < new Date()) flags.push("overdue");
 
           return {
             id: r.id,
@@ -394,6 +406,12 @@ export async function GET(request: Request) {
             nextStep: r.next_step || null,
             dealType: r.deal_type || null,
             health,
+            healthScore: score,
+            healthBucket: bucket,
+            // Momentum signals — consumed by TrendIcons
+            regressionCount: parseInt(String(r.regression_count ?? 0)),
+            slipCount: parseInt(String(r.slip_count ?? 0)),
+            amountNet: parseFloat(String(r.amount_net ?? 0)),
             priorityScore,
             flags,
           };

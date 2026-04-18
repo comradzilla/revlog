@@ -9,6 +9,8 @@ import {
   pipelineCondition,
   isStageRegression,
 } from "@/lib/query-helpers";
+import { buildHealthCte, breakdownFor } from "@/lib/health";
+import { getHealthWeights } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -90,16 +92,20 @@ export async function GET(request: Request) {
 
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
+        const weights = await getHealthWeights();
         const sql = `
+          ${buildHealthCte(weights)}
           SELECT * FROM (
             SELECT DISTINCT ON (d.id)
               d.id, d.deal_name, d.pipeline_name, d.stage_name as current_stage_name,
               d.amount, cl.changed_at as last_modified, cl.property as change_type,
-              d.deal_type, d.stage_entered_at,
-              COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name
+              d.deal_type, d.stage_entered_at, d.next_step,
+              COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
+              h.health_score, h.regression_count, h.slip_count, h.amount_net, h.next_step_last_update
             FROM deals d
             INNER JOIN deal_changelog cl ON cl.deal_id = d.id
             LEFT JOIN owners o ON o.id = d.owner_id
+            LEFT JOIN deal_health h ON h.deal_id = d.id
             ${whereClause}
             ORDER BY d.id, cl.changed_at DESC
           ) sub
@@ -108,19 +114,38 @@ export async function GET(request: Request) {
         params.push(limit);
 
         const result = await query(sql, params);
-        const deals = result.rows.map((r: Record<string, string>) => ({
-          id: r.id,
-          dealName: r.deal_name,
-          pipelineName: r.pipeline_name,
-          currentStageName: r.current_stage_name,
-          stageNumber: 0,
-          amount: parseFloat(r.amount || "0"),
-          lastModified: r.last_modified,
-          ownerName: r.owner_name,
-          changeType: r.change_type,
-          dealType: r.deal_type,
-          stageEnteredAt: r.stage_entered_at,
-        }));
+        const deals = result.rows.map((r: Record<string, string | number | null>) => {
+          const score = r.health_score === null ? null : parseInt(String(r.health_score));
+          const breakdown = breakdownFor({
+            health_score: score,
+            regression_count: parseInt(String(r.regression_count ?? 0)),
+            slip_count: parseInt(String(r.slip_count ?? 0)),
+            amount_net: parseFloat(String(r.amount_net ?? 0)),
+            next_step_last_update: r.next_step_last_update as string | null,
+            stage_entered_at: r.stage_entered_at as string | null,
+            stage_name: r.current_stage_name as string | null,
+            next_step: r.next_step as string | null,
+          }, weights);
+          return {
+            id: r.id,
+            dealName: r.deal_name,
+            pipelineName: r.pipeline_name,
+            currentStageName: r.current_stage_name,
+            stageNumber: 0,
+            amount: parseFloat(String(r.amount || "0")),
+            lastModified: r.last_modified,
+            ownerName: r.owner_name,
+            changeType: r.change_type,
+            dealType: r.deal_type,
+            stageEnteredAt: r.stage_entered_at,
+            healthScore: score,
+            healthBucket: breakdown.bucket,
+            healthPenalties: breakdown.penalties,
+            regressionCount: parseInt(String(r.regression_count ?? 0)),
+            slipCount: parseInt(String(r.slip_count ?? 0)),
+            amountNet: parseFloat(String(r.amount_net ?? 0)),
+          };
+        });
         return Response.json({ deals });
       }
 
@@ -606,36 +631,62 @@ export async function GET(request: Request) {
         const dtc = dealTypeCondition(dealTypeFilter, "d.deal_type", staleParams);
         if (dtc) staleConditions.push(dtc);
 
+        const weights = await getHealthWeights();
         const result = await query(
-          `SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
-                  d.next_step,
+          `${buildHealthCte(weights)}
+           SELECT d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
+                  d.next_step, d.stage_entered_at,
                   COALESCE(o.first_name || ' ' || o.last_name, 'Unassigned') as owner_name,
                   EXTRACT(DAY FROM NOW() - d.stage_entered_at)::integer as days_in_stage,
-                  MAX(cl.changed_at) as last_next_step_update
+                  MAX(cl.changed_at) as last_next_step_update,
+                  h.health_score, h.regression_count, h.slip_count, h.amount_net,
+                  h.next_step_last_update as health_next_step_last_update
            FROM deals d
            LEFT JOIN deal_changelog cl ON cl.deal_id = d.id AND cl.property = 'hs_next_step'
            LEFT JOIN owners o ON o.id = d.owner_id
+           LEFT JOIN deal_health h ON h.deal_id = d.id
            WHERE ${staleConditions.join(" AND ")}
            GROUP BY d.id, d.deal_name, d.amount, d.stage_name, d.pipeline_name,
-                    d.next_step, d.stage_entered_at, o.first_name, o.last_name
+                    d.next_step, d.stage_entered_at, o.first_name, o.last_name,
+                    h.health_score, h.regression_count, h.slip_count, h.amount_net,
+                    h.next_step_last_update
            HAVING MAX(cl.changed_at) IS NULL
                OR MAX(cl.changed_at) < NOW() - INTERVAL '14 days'
-           ORDER BY d.amount DESC NULLS LAST
+           ORDER BY h.health_score ASC NULLS LAST, d.amount DESC NULLS LAST
            LIMIT 50`,
           staleParams
         );
 
-        const deals = result.rows.map((r: Record<string, string>) => ({
-          id: r.id,
-          dealName: r.deal_name,
-          amount: parseFloat(r.amount || "0"),
-          stageName: r.stage_name,
-          pipelineName: r.pipeline_name,
-          ownerName: r.owner_name,
-          nextStep: r.next_step || null,
-          daysInStage: parseInt(r.days_in_stage) || 0,
-          lastNextStepUpdate: r.last_next_step_update || null,
-        }));
+        const deals = result.rows.map((r: Record<string, string | number | null>) => {
+          const score = r.health_score === null ? null : parseInt(String(r.health_score));
+          const breakdown = breakdownFor({
+            health_score: score,
+            regression_count: parseInt(String(r.regression_count ?? 0)),
+            slip_count: parseInt(String(r.slip_count ?? 0)),
+            amount_net: parseFloat(String(r.amount_net ?? 0)),
+            next_step_last_update: r.health_next_step_last_update as string | null,
+            stage_entered_at: r.stage_entered_at as string | null,
+            stage_name: r.stage_name as string | null,
+            next_step: r.next_step as string | null,
+          }, weights);
+          return {
+            id: r.id,
+            dealName: r.deal_name,
+            amount: parseFloat(String(r.amount || "0")),
+            stageName: r.stage_name,
+            pipelineName: r.pipeline_name,
+            ownerName: r.owner_name,
+            nextStep: r.next_step || null,
+            daysInStage: parseInt(String(r.days_in_stage)) || 0,
+            lastNextStepUpdate: r.last_next_step_update || null,
+            healthScore: score,
+            healthBucket: breakdown.bucket,
+            healthPenalties: breakdown.penalties,
+            regressionCount: parseInt(String(r.regression_count ?? 0)),
+            slipCount: parseInt(String(r.slip_count ?? 0)),
+            amountNet: parseFloat(String(r.amount_net ?? 0)),
+          };
+        });
 
         const totalValue = deals.reduce((s, d) => s + d.amount, 0);
 

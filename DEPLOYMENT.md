@@ -79,6 +79,9 @@ Required variables:
 HUBSPOT_ACCESS_TOKEN=pat-na1-XXXXXXXX
 DATABASE_URL=postgresql://ceo:dashboard2024@localhost:5433/ceo_dashboard
 CRON_SECRET=a-random-secret-string
+DASHBOARD_PASSWORD=choose-a-strong-password
+SESSION_SECRET=random-32-char-string
+ANTHROPIC_API_KEY=sk-ant-XXXXXXXX     # optional — enables AI deal summaries in drill-down drawer
 PORT=3000
 ```
 

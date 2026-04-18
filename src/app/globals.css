@@ -265,6 +265,15 @@ body {
   animation: slide-up 0.25s ease-out forwards;
 }
 
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.22s ease-out forwards;
+}
+
 /* Mobile: tighter changelog rows */
 @media (max-width: 639px) {
   .changelog-entry {

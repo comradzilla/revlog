@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { HealthBadge } from "@/components/HealthBadge";
+import { DealLink } from "@/components/DealLink";
+import { TrendIcons } from "@/components/TrendIcons";
+import type { HealthBucket, HealthPenalty } from "@/lib/health";
 
 interface StaleDeal {
   id: string;
@@ -12,6 +16,12 @@ interface StaleDeal {
   nextStep: string | null;
   daysInStage: number;
   lastNextStepUpdate: string | null;
+  healthScore?: number | null;
+  healthBucket?: HealthBucket;
+  healthPenalties?: HealthPenalty[];
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
 }
 
 function formatDollars(v: number): string {
@@ -23,9 +33,11 @@ function formatDollars(v: number): string {
 export function StaleDealsList({
   deals,
   totalValue,
+  onOpenDeal,
 }: {
   deals: StaleDeal[];
   totalValue: number;
+  onOpenDeal?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -64,30 +76,49 @@ export function StaleDealsList({
 
       <div className="space-y-1">
         {shown.map((deal) => (
-          <a
+          <div
             key={deal.id}
-            href={`https://app.hubspot.com/contacts/3282655/record/0-3/${deal.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors group"
+            className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors"
             title={deal.nextStep ? `Next step: ${deal.nextStep}` : "No next step set"}
           >
+            {deal.healthBucket && deal.healthScore != null ? (
+              <HealthBadge
+                score={deal.healthScore}
+                bucket={deal.healthBucket}
+                penalties={deal.healthPenalties}
+              />
+            ) : (
+              <span className="inline-block w-[28px] shrink-0" />
+            )}
             <span className="font-mono text-[10px] text-[var(--accent-orange)] shrink-0 w-8 text-right">
               {deal.daysInStage}d
             </span>
             <span className="font-mono text-[10px] px-1 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)] shrink-0">
               {deal.stageName.replace(/^\d+\s*-\s*/, "")}
             </span>
-            <span className="font-mono text-xs text-[var(--text-secondary)] truncate flex-1 group-hover:text-[var(--accent-blue)] transition-colors">
-              {deal.dealName}
-            </span>
+            <DealLink
+              dealId={deal.id}
+              dealName={deal.dealName}
+              onOpenDeal={onOpenDeal}
+              className="font-mono text-xs text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors"
+              wrapperClassName="flex-1 min-w-0"
+            />
+            <TrendIcons
+              bucket={deal.healthBucket}
+              amount={deal.amount}
+              momentumSignals={{
+                regression_count: deal.regressionCount,
+                slip_count: deal.slipCount,
+                amount_net: deal.amountNet,
+              }}
+            />
             <span className="font-mono text-[10px] text-[var(--text-muted)] shrink-0 hidden lg:inline">
               {deal.ownerName}
             </span>
             <span className="font-mono text-xs text-[var(--accent-orange)] shrink-0">
               {formatDollars(deal.amount)}
             </span>
-          </a>
+          </div>
         ))}
       </div>
 

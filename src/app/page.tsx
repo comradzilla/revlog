@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { StatusBar, type SyncMeta } from "@/components/StatusBar";
+import type { HealthBucket, HealthPenalty } from "@/lib/health";
 import { StatsCards } from "@/components/StatsCards";
 import { PipelineFunnel } from "@/components/PipelineFunnel";
 import { ChangelogFeed } from "@/components/ChangelogFeed";
@@ -14,6 +15,7 @@ import { MobileStatsSummary } from "@/components/MobileStatsSummary";
 import { MobileSidebarTabs } from "@/components/MobileSidebarTabs";
 import { PipelineLedger } from "@/components/PipelineLedger";
 import { LivelineCharts } from "@/components/LivelineCharts";
+import { DealDrawer } from "@/components/DealDrawer";
 
 interface ChangelogEntry {
   dealId: string;
@@ -44,6 +46,12 @@ interface DealEntry {
   changeType?: string;
   dealType?: string;
   stageEnteredAt?: string;
+  healthScore?: number | null;
+  healthBucket?: HealthBucket;
+  healthPenalties?: HealthPenalty[];
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
 }
 
 interface StageData {
@@ -82,6 +90,12 @@ interface StaleDeal {
   nextStep: string | null;
   daysInStage: number;
   lastNextStepUpdate: string | null;
+  healthScore?: number | null;
+  healthBucket?: HealthBucket;
+  healthPenalties?: HealthPenalty[];
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
 }
 
 function getCurrentQuarter(): string {
@@ -166,6 +180,30 @@ export default function Dashboard() {
   const [netMovementTrend, setNetMovementTrend] = useState<{ candles: { day: string; time: number; open: number; high: number; low: number; close: number; net: number }[]; lineData: { time: number; value: number }[]; currentValue: number; startValue: number; netChange: number } | null>(null);
 
   const activeRequest = useRef(0);
+
+  // Drawer state — drive from URL (?deal=<id>) so it's shareable and back-button-friendly
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  useEffect(() => {
+    const sync = () => {
+      const url = new URL(window.location.href);
+      setSelectedDealId(url.searchParams.get("deal"));
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const openDeal = useCallback((id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("deal", id);
+    window.history.pushState({}, "", url);
+    setSelectedDealId(id);
+  }, []);
+  const closeDeal = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("deal");
+    window.history.pushState({}, "", url);
+    setSelectedDealId(null);
+  }, []);
 
   const toggleQuarter = (qtr: string) => {
     setSelectedQuarters(prev => {
@@ -644,11 +682,11 @@ export default function Dashboard() {
                     ))}
                   </div>
                 ) : (
-                  <ChangelogFeed entries={changelog} filter={filter} />
+                  <ChangelogFeed entries={changelog} filter={filter} onOpenDeal={openDeal} />
                 )
               ) : (
                 ledgerData ? (
-                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} transactions={ledgerData.transactions} hiddenCount={ledgerData.hiddenCount} />
+                  <PipelineLedger currentBalance={ledgerData.currentBalance} quarterBalance={ledgerData.quarterBalance} quarterLabel={ledgerData.quarterLabel} transactions={ledgerData.transactions} hiddenCount={ledgerData.hiddenCount} onOpenDeal={openDeal} />
                 ) : (
                   <div className="space-y-3 py-4">
                     {[...Array(6)].map((_, i) => (
@@ -684,12 +722,12 @@ export default function Dashboard() {
                 {
                   key: "stale",
                   label: "Stale",
-                  content: <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} />,
+                  content: <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} onOpenDeal={openDeal} />,
                 },
                 {
                   key: "recent",
                   label: "Recent",
-                  content: <RecentDeals deals={recentDeals} />,
+                  content: <RecentDeals deals={recentDeals} onOpenDeal={openDeal} />,
                 },
               ]}
             />
@@ -728,9 +766,9 @@ export default function Dashboard() {
             )}
 
             {/* Stale deals warning */}
-            <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} />
+            <StaleDealsList deals={staleDeals} totalValue={staleTotalValue} onOpenDeal={openDeal} />
 
-            <RecentDeals deals={recentDeals} />
+            <RecentDeals deals={recentDeals} onOpenDeal={openDeal} />
           </div>
         </div>
 
@@ -750,6 +788,9 @@ export default function Dashboard() {
           </div>
         </footer>
       </main>
+
+      {/* Deal drill-down drawer — URL-driven via ?deal=<id> */}
+      <DealDrawer dealId={selectedDealId} onClose={closeDeal} />
 
       {/* Mobile filter drawer (rendered outside main for fixed positioning) */}
       <MobileFilterDrawer

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { DealLink } from "@/components/DealLink";
 
 interface LedgerTransaction {
   dealId: string;
@@ -20,6 +21,7 @@ interface PipelineLedgerProps {
   quarterLabel?: string | null;
   transactions: LedgerTransaction[];
   hiddenCount?: number;
+  onOpenDeal?: (id: string) => void;
 }
 
 function formatCurrency(value: number, compact = false): string {
@@ -58,7 +60,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
   date_moved_out: { label: "DATE OUT", color: "var(--accent-red)" },
 };
 
-export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, transactions, hiddenCount = 0 }: PipelineLedgerProps) {
+export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, transactions, hiddenCount = 0, onOpenDeal }: PipelineLedgerProps) {
   const [hiddenDismissed, setHiddenDismissed] = useState(false);
 
   // Reset dismissal when hidden count changes (e.g., filter change)
@@ -126,12 +128,9 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
           const config = TYPE_CONFIG[txn.type] || { label: txn.type, color: "var(--text-muted)" };
 
           return (
-            <a
+            <div
               key={`${txn.dealId}-${txn.timestamp}-${i}`}
-              href={`https://app.hubspot.com/contacts/3282655/record/0-3/${txn.dealId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group"
+              className="flex items-center gap-1.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs"
             >
               {/* Line 1: timestamp + type badge + deal name */}
               <div className="flex items-center gap-1.5 min-w-0">
@@ -149,9 +148,13 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
                 >
                   {config.label}
                 </span>
-                <span className="text-[var(--text-secondary)] truncate min-w-0 group-hover:text-[var(--accent-blue)] transition-colors">
-                  {txn.dealName}
-                </span>
+                <DealLink
+                  dealId={txn.dealId}
+                  dealName={txn.dealName}
+                  onOpenDeal={onOpenDeal}
+                  className="text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors"
+                  wrapperClassName="min-w-0"
+                />
               </div>
 
               {/* Line 2 (mobile) / inline (desktop): description + delta + balance */}
@@ -168,7 +171,7 @@ export function PipelineLedger({ currentBalance, quarterBalance, quarterLabel, t
                   {formatCurrency(txn.balance, true)}
                 </span>
               </div>
-            </a>
+            </div>
           );
         })}
       </div>

@@ -105,6 +105,14 @@ export function StatusBar({
             )}
           </button>
           <div className="h-4 w-px bg-[var(--border-color)] hidden sm:block" />
+          <a
+            href="/settings/health"
+            className="font-mono text-[10px] text-[var(--text-muted)] hover:text-[var(--accent-blue)] transition-colors hidden sm:inline"
+            title="Tune health score weights"
+          >
+            settings
+          </a>
+          <div className="h-4 w-px bg-[var(--border-color)] hidden sm:block" />
           <ThemeToggle />
           <div className="h-4 w-px bg-[var(--border-color)] hidden sm:block" />
           <button

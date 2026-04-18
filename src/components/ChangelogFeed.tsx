@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { DealLink } from "@/components/DealLink";
 
 interface ChangelogEntry {
   dealId: string;
@@ -64,9 +65,11 @@ const PROPERTY_CONFIG: Record<string, { label: string; color: string }> = {
 export function ChangelogFeed({
   entries,
   filter,
+  onOpenDeal,
 }: {
   entries: ChangelogEntry[];
   filter: string;
+  onOpenDeal?: (id: string) => void;
 }) {
   const filtered = useMemo(() => {
     if (filter === "all") return entries;
@@ -114,7 +117,7 @@ export function ChangelogFeed({
 
           <div className="space-y-0">
             {dateEntries.map((entry, i) => (
-              <ChangelogRow key={`${entry.dealId}-${entry.property}-${entry.timestamp}-${i}`} entry={entry} />
+              <ChangelogRow key={`${entry.dealId}-${entry.property}-${entry.timestamp}-${i}`} entry={entry} onOpenDeal={onOpenDeal} />
             ))}
           </div>
         </div>
@@ -123,7 +126,7 @@ export function ChangelogFeed({
   );
 }
 
-function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
+function ChangelogRow({ entry, onOpenDeal }: { entry: ChangelogEntry; onOpenDeal?: (id: string) => void }) {
   const isStageChange = entry.property === "dealstage";
   const isAmountChange = entry.property === "amount";
   const isCreation = entry.property === "created";
@@ -150,11 +153,8 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
     : "";
 
   return (
-    <a
-      href={`https://app.hubspot.com/contacts/3282655/record/0-3/${entry.dealId}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`changelog-entry flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs group ${rowBorderClass}`}
+    <div
+      className={`changelog-entry flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 py-1.5 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors font-mono text-xs ${rowBorderClass}`}
     >
       {/* Line 1 (mobile: time + deal name) / Desktop: inline */}
       <div className="flex items-center gap-2 sm:contents">
@@ -164,9 +164,13 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
         </span>
 
         {/* Deal name (mobile: shows on line 1) */}
-        <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors sm:hidden">
-          {entry.dealName}
-        </span>
+        <DealLink
+          dealId={entry.dealId}
+          dealName={entry.dealName}
+          onOpenDeal={onOpenDeal}
+          className="text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors"
+          wrapperClassName="shrink-1 min-w-0 sm:hidden"
+        />
       </div>
 
       {/* Line 2 (mobile: tags + change) / Desktop: inline */}
@@ -203,9 +207,13 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
         )}
 
         {/* Deal name (desktop only — on mobile it's on line 1) */}
-        <span className="text-[var(--text-secondary)] truncate shrink-1 min-w-0 group-hover:text-[var(--accent-blue)] transition-colors hidden sm:inline">
-          {entry.dealName}
-        </span>
+        <DealLink
+          dealId={entry.dealId}
+          dealName={entry.dealName}
+          onOpenDeal={onOpenDeal}
+          className="text-[var(--text-secondary)] hover:text-[var(--accent-blue)] transition-colors"
+          wrapperClassName="shrink-1 min-w-0 hidden sm:inline-flex"
+        />
 
         {/* Owner name */}
         {entry.ownerName && entry.ownerName !== "Unassigned" && !isOwnerChange && (
@@ -266,6 +274,6 @@ function ChangelogRow({ entry }: { entry: ChangelogEntry }) {
         )}
       </span>
       </div>
-    </a>
+    </div>
   );
 }

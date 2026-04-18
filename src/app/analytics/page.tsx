@@ -7,6 +7,7 @@ import { AnalyticsSummary } from "@/components/analytics/AnalyticsSummary";
 import { PipelineOverTimeChart } from "@/components/analytics/PipelineOverTimeChart";
 import { PipelineCreatedChart } from "@/components/analytics/PipelineCreatedChart";
 import { DealDrilldownTable } from "@/components/analytics/DealDrilldownTable";
+import { DealDrawer } from "@/components/DealDrawer";
 
 // ── Types ──
 
@@ -55,6 +56,10 @@ interface DrilldownDeal {
   nextStep: string | null;
   dealType: string | null;
   health: "green" | "amber" | "red";
+  healthBucket?: "green" | "amber" | "red" | "closed";
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
   priorityScore: number;
   flags: string[];
 }
@@ -96,6 +101,29 @@ function getPreviousQuarter(quarter: string): { start: string; end: string } {
 
 export default function AnalyticsPage() {
   // Filter state
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  useEffect(() => {
+    const sync = () => {
+      const url = new URL(window.location.href);
+      setSelectedDealId(url.searchParams.get("deal"));
+    };
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const openDeal = useCallback((id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("deal", id);
+    window.history.pushState({}, "", url);
+    setSelectedDealId(id);
+  }, []);
+  const closeDeal = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("deal");
+    window.history.pushState({}, "", url);
+    setSelectedDealId(null);
+  }, []);
+
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>([getCurrentQuarter()]);
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
   const [pipelineFilter, setPipelineFilter] = useState<string[]>([]);
@@ -350,8 +378,11 @@ export default function AnalyticsPage() {
           order={drilldownOrder}
           onSortChange={(s, o) => { setDrilldownSort(s); setDrilldownOrder(o); }}
           persistent={true}
+          onOpenDeal={openDeal}
         />
       </main>
+
+      <DealDrawer dealId={selectedDealId} onClose={closeDeal} />
 
       {/* Footer */}
       <footer className="border-t border-[var(--border-color)] py-3 px-6">

@@ -1,5 +1,10 @@
 "use client";
 
+import { HealthBadge } from "@/components/HealthBadge";
+import { DealLink } from "@/components/DealLink";
+import { TrendIcons } from "@/components/TrendIcons";
+import type { HealthBucket, HealthPenalty } from "@/lib/health";
+
 interface Deal {
   id: string;
   dealName: string;
@@ -12,6 +17,12 @@ interface Deal {
   changeType?: string;
   dealType?: string;
   stageEnteredAt?: string;
+  healthScore?: number | null;
+  healthBucket?: HealthBucket;
+  healthPenalties?: HealthPenalty[];
+  regressionCount?: number;
+  slipCount?: number;
+  amountNet?: number;
 }
 
 function getStageClass(stageName: string): string {
@@ -66,7 +77,7 @@ function getDaysColor(days: number): string {
   return "var(--accent-red)";
 }
 
-export function RecentDeals({ deals }: { deals: Deal[] }) {
+export function RecentDeals({ deals, onOpenDeal }: { deals: Deal[]; onOpenDeal?: (id: string) => void }) {
   return (
     <div className="card-glow rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -82,12 +93,9 @@ export function RecentDeals({ deals }: { deals: Deal[] }) {
           const typeColor = getDealTypeColor(deal.dealType);
           const days = daysInStage(deal.stageEnteredAt);
           return (
-            <a
+            <div
               key={deal.id}
-              href={`https://app.hubspot.com/contacts/3282655/record/0-3/${deal.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 py-2 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors group"
+              className="flex items-center gap-2 py-2 px-2 rounded hover:bg-[var(--bg-card-hover)] transition-colors"
             >
               <span className="font-mono text-[10px] text-[var(--text-muted)] w-6 text-right shrink-0">
                 {timeAgo(deal.lastModified)}
@@ -143,16 +151,38 @@ export function RecentDeals({ deals }: { deals: Deal[] }) {
                 </span>
               )}
 
-              <span className="font-mono text-xs text-[var(--text-primary)] truncate flex-1 group-hover:text-white transition-colors">
-                {deal.dealName}
-              </span>
+              <DealLink
+                dealId={deal.id}
+                dealName={deal.dealName}
+                onOpenDeal={onOpenDeal}
+                className="font-mono text-xs text-[var(--text-primary)] hover:text-[var(--accent-blue)] transition-colors"
+                wrapperClassName="flex-1 min-w-0"
+              />
+
+              <TrendIcons
+                bucket={deal.healthBucket}
+                amount={deal.amount}
+                momentumSignals={{
+                  regression_count: deal.regressionCount,
+                  slip_count: deal.slipCount,
+                  amount_net: deal.amountNet,
+                }}
+              />
+
+              {deal.healthBucket && deal.healthScore != null && (
+                <HealthBadge
+                  score={deal.healthScore}
+                  bucket={deal.healthBucket}
+                  penalties={deal.healthPenalties}
+                />
+              )}
 
               <span className="font-mono text-xs text-[var(--accent-green)] shrink-0">
                 ${deal.amount >= 1000
                   ? `${(deal.amount / 1000).toFixed(0)}K`
                   : deal.amount.toFixed(0)}
               </span>
-            </a>
+            </div>
           );
         })}
       </div>
